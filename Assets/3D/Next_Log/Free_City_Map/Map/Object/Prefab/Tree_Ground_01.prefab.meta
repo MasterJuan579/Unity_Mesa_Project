@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: 58f3837c00cf03942a23143b93bcffd6
+timeCreated: 1535088760
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 100100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 127919
+  packageName: Lowpoly Free City Map
+  packageVersion: 1.0
+  assetPath: Assets/3D/Next_Log/Free_City_Map/Map/Object/Prefab/Tree_Ground_01.prefab
+  uploadId: 268353

@@ -1,0 +1,2 @@
+mesa>=3.0
+websockets>=10.4

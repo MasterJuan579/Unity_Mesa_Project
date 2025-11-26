@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: 2f5811962b2c9c241b40465de1f9d338
+timeCreated: 1535088750
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 100100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 127919
+  packageName: Lowpoly Free City Map
+  packageVersion: 1.0
+  assetPath: Assets/3D/Next_Log/Free_City_Map/Map/Object/Prefab/Tree_01.prefab
+  uploadId: 268353

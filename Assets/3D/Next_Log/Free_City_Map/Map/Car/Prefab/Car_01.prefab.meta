@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: 1d2c6670233642f42a7b4c31bafce661
+timeCreated: 1535088185
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 100100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 127919
+  packageName: Lowpoly Free City Map
+  packageVersion: 1.0
+  assetPath: Assets/3D/Next_Log/Free_City_Map/Map/Car/Prefab/Car_01.prefab
+  uploadId: 268353

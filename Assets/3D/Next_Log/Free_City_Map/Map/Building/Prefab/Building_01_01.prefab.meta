@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: c3fc861d491ff2a4ead81ab33146571f
+timeCreated: 1535088139
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 100100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 127919
+  packageName: Lowpoly Free City Map
+  packageVersion: 1.0
+  assetPath: Assets/3D/Next_Log/Free_City_Map/Map/Building/Prefab/Building_01_01.prefab
+  uploadId: 268353

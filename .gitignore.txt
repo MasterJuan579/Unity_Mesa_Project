@@ -1,0 +1,16 @@
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+
+# Archivos de sistema y basura
+.vs/
+.gradle/
+.idea/
+.DS_Store
+*.sln
+*.csproj
+*.unityproj
