@@ -10,7 +10,7 @@ class SyncAgent(Agent):
         pass
 
 class SyncModel(Model):
-    def __init__(self, width=20, height=20):
+    def __init__(self, width=74, height=74):
         super().__init__()
         self.grid = MultiGrid(width, height, torus=False)
         self.agents_dict = {}

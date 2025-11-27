@@ -12,8 +12,8 @@ from agents import VehicleAgent, TrafficLightAgent
 
 # --- CONFIGURATION ---
 # --- CONFIGURATION ---
-GRID_WIDTH = 25
-GRID_HEIGHT = 25
+GRID_WIDTH = 74
+GRID_HEIGHT = 74
 
 COLOR_MAP = {
     BUILDING: "#4682B4",   # Steel Blue

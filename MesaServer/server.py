@@ -4,8 +4,8 @@ import websockets
 import json
 from model import SyncModel
 
-MODEL_WIDTH = 20
-MODEL_HEIGHT = 20
+MODEL_WIDTH = 74
+MODEL_HEIGHT = 74
 WS_HOST = "localhost"
 WS_PORT = 8765
 

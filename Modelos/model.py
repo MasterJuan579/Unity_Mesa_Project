@@ -23,7 +23,7 @@ class TrafficModel(Model):
         self.vehicles_spawned = 0        
         self.step_count = 0
         
-        self.grid = MultiGrid(25, 25, torus=False)
+        self.grid = MultiGrid(74, 74, torus=False)
         # self.schedule = RandomActivation(self) # Removed in Mesa 3.0
         self.running = True      # --- CONFIGURACIÓN DE COOLDOWN (ESPERA) ---
         # 30 pasos = 3 segundos reales aprox. (si speed=0.1)
@@ -32,10 +32,10 @@ class TrafficModel(Model):
         
         # --- ESPACIO Y AGENTES ---
         # Grid de 25x25
-        self.space = ContinuousSpace(x_max=25, y_max=25, torus=False)
+        self.space = ContinuousSpace(x_max=74, y_max=74, torus=False)
         self.agents_list = [] 
         # Inicializamos con EMPTY en lugar de BUILDING
-        self.city_layout = [[EMPTY for y in range(25)] for x in range(25)]
+        self.city_layout = [[EMPTY for y in range(74)] for x in range(74)]
         self.graph = nx.DiGraph()
         self.parking_spots = {} 
         self.traffic_lights = [] 
@@ -247,7 +247,7 @@ class TrafficModel(Model):
                 next_y = curr[1] + direction[1]
                 node_next = (next_x, next_y)
                 
-                if not (0 <= next_x < 24 and 0 <= next_y < 24): break
+                if not (0 <= next_x < 73 and 0 <= next_y < 73): break
                 
                 self.graph.add_node(node_next)
                 self.graph.add_edge(node_curr, node_next, weight=weight)
@@ -417,7 +417,7 @@ class TrafficModel(Model):
             (22,12), (23,12)
         ]
         for x, y in green_coords:
-            if 0 <= x < 25 and 0 <= y < 25:
+            if 0 <= x < 74 and 0 <= y < 74:
                 self.city_layout[x][y] = GREEN_ZONE
 
         # Red Zones (Indices 0-23)
@@ -438,7 +438,7 @@ class TrafficModel(Model):
             (21,10), (21,11)
         ]
         for x, y in red_coords:
-            if 0 <= x < 25 and 0 <= y < 25:
+            if 0 <= x < 74 and 0 <= y < 74:
                 self.city_layout[x][y] = RED_ZONE
 
     # =======================================================
