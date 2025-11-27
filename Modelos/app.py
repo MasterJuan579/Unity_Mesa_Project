@@ -7,12 +7,13 @@ import numpy as np
 import time
 import asyncio
 
-from model import TrafficModel, BUILDING, ROAD, ROUNDABOUT, PARKING, EMPTY, MEDIAN
+from model import TrafficModel, BUILDING, ROAD, ROUNDABOUT, PARKING, EMPTY, MEDIAN, GREEN_ZONE, RED_ZONE
 from agents import VehicleAgent, TrafficLightAgent
 
 # --- CONFIGURATION ---
-GRID_WIDTH = 24
-GRID_HEIGHT = 24
+# --- CONFIGURATION ---
+GRID_WIDTH = 25
+GRID_HEIGHT = 25
 
 COLOR_MAP = {
     BUILDING: "#4682B4",   # Steel Blue
@@ -20,7 +21,9 @@ COLOR_MAP = {
     ROUNDABOUT: "#8B4513", # Saddle Brown
     PARKING: "#FFD700",    # Gold
     EMPTY: "#FFFFFF",      # White
-    MEDIAN: "#32CD32"      # Lime Green
+    MEDIAN: "#32CD32",     # Lime Green (Not used for lines, maybe for old medians)
+    GREEN_ZONE: "#00B050", # Green Zone (Semáforo)
+    RED_ZONE: "#FF0000"    # Red Zone (Semáforo)
 }
 
 AGENT_COLORS = {
@@ -53,77 +56,96 @@ def step_model():
         model_state.value = model_state.value 
         current_step.value += 1
 
-def create_city_visualization(model: TrafficModel) -> Figure:
-    fig, ax = plt.subplots(figsize=(10, 10))
+def create_city_visualization(model):
+    # Create figure and axis
+    fig, ax = plt.subplots(figsize=(8.5, 8.5))
     
-    # 1. DRAW MAP
-    rects = []
-    colors = []
+    # Draw the grid
+    city_data = np.zeros((GRID_WIDTH, GRID_HEIGHT))
+    
+    # Fill grid with colors based on agent type
     for x in range(GRID_WIDTH):
         for y in range(GRID_HEIGHT):
-            cell_type = CITY_LAYOUT[x][y]
-            # CORRECCIÓN: Usar (x, y) directamente
-            rect = patches.Rectangle((x, y), 1, 1)
-            rects.append(rect)
-            colors.append(COLOR_MAP[cell_type])
-
-    collection = PatchCollection(rects, facecolors=colors, edgecolors='white', linewidths=0.5, zorder=0)
-    ax.add_collection(collection)
-    
-    # 2. DRAW PARKING
-    for pid, pos in model.parking_spots.items():
-        px, py = pos
-        border = patches.Rectangle((px, py), 1, 1, linewidth=2, edgecolor='black', facecolor='none', zorder=5)
-        ax.add_patch(border)
-        ax.text(px + 0.5, py + 0.5, "P", color='black', fontsize=10, ha='center', va='center', fontweight='bold', zorder=6)
-
-    # 3. DRAW AGENTS
-    vehicle_count = 0
-    
-    for agent in model.agents_list:
-        # --- NUEVA PROTECCIÓN ---
-        # Los TrafficManagerAgent no tienen posición física.
-        # Si intentamos leer agent.pos, daría error. Los saltamos.
-        if not hasattr(agent, "pos") or agent.pos is None:
-            continue
-        
-        # Mesa guarda posiciones como (float, float). Ej: (12.5, 3.5)
-        x, y = agent.pos
-        
-        if isinstance(agent, VehicleAgent):
-            vehicle_count += 1
-            color = AGENT_COLORS["moving"]
-            if agent.speed < 0.01:
-                color = AGENT_COLORS["stopped"]
+            cell_contents = model.grid.get_cell_list_contents((x, y))
+            # Default to road color
+            color_val = 0.2 # Light gray for road
             
-            circle = patches.Circle((x, y), radius=0.35, facecolor=color, edgecolor='white', linewidth=1, zorder=15)
-            ax.add_patch(circle)
+            # Check for static layout first
+            layout_type = model.city_layout[x][y]
+            if layout_type == BUILDING:
+                color_val = 0.8 # Blue for buildings
+            elif layout_type == ROUNDABOUT:
+                color_val = 0.9 # Brown for roundabout
+            elif layout_type == GREEN_ZONE:
+                color_val = 0.6 # Green for static zone
+            elif layout_type == RED_ZONE:
+                color_val = 0.7 # Red for static zone
+            elif layout_type == EMPTY: # Should be road/empty
+                color_val = 0.2
             
-        elif isinstance(agent, TrafficLightAgent):
-            # El agente físico lee el estado de su manager automáticamente aquí
-            if agent.state == "GREEN": c = AGENT_COLORS["light_green"]
-            elif agent.state == "YELLOW": c = AGENT_COLORS["light_yellow"]
-            else: c = AGENT_COLORS["light_red"]
+            # Check for dynamic agents
+            if cell_contents:
+                for agent in cell_contents:
+                    if isinstance(agent, TrafficLightAgent):
+                        if agent.state: # Green
+                            color_val = 0.6
+                        else: # Red
+                            color_val = 0.7
             
-            rect = patches.Rectangle(
-                (x - 0.5, y - 0.5), 
-                1.0, 1.0, 
-                facecolor=c, 
-                edgecolor='none', 
-                alpha=0.6, 
-                zorder=20
-            )
-            ax.add_patch(rect)
+            # We'll use a custom colormap, so we just store integers/floats mapping to types
+            # Let's use the COLOR_MAP keys directly if possible, or map to them
+            # Simplified approach: create an RGB grid directly
+            pass
 
-    ax.set_aspect("equal")
-    ax.set_xlim(0, GRID_WIDTH)
-    ax.set_ylim(0, GRID_HEIGHT)
-    ax.invert_yaxis()
+    # Re-implement using imshow with direct colors for simplicity
+    # Create an RGB array
+    rgb_grid = np.zeros((GRID_WIDTH, GRID_HEIGHT, 3))
     
-    ax.set_xticks(np.arange(0.5, GRID_WIDTH + 0.5, 1))
-    ax.set_yticks(np.arange(0.5, GRID_HEIGHT + 0.5, 1))
-    ax.set_xticklabels(range(GRID_WIDTH))
-    ax.set_yticklabels(range(GRID_HEIGHT))
+    vehicle_count = 0 # Initialize vehicle count for the title
+
+    for x in range(GRID_WIDTH):
+        for y in range(GRID_HEIGHT):
+            # Default background (Road/Empty)
+            color_hex = COLOR_MAP[ROAD]
+            
+            # 1. Draw Static Layout
+            layout_type = model.city_layout[x][y]
+            if layout_type in COLOR_MAP:
+                color_hex = COLOR_MAP[layout_type]
+                
+            # 2. Draw Agents (override static)
+            cell_contents = model.grid.get_cell_list_contents((x, y))
+            for agent in cell_contents:
+                if isinstance(agent, VehicleAgent): # Changed from CarAgent to VehicleAgent
+                    vehicle_count += 1
+                    color_hex = AGENT_COLORS["moving"]
+                    if agent.speed < 0.01:
+                        color_hex = AGENT_COLORS["stopped"]
+                elif isinstance(agent, TrafficLightAgent):
+                    color_hex = AGENT_COLORS["light_green"] if agent.state == "GREEN" else AGENT_COLORS["light_red"] # Adjusted to use AGENT_COLORS and state string
+            
+            # Convert hex to rgb
+            rgb_grid[x, y] = [int(color_hex[1:3], 16)/255, int(color_hex[3:5], 16)/255, int(color_hex[5:7], 16)/255]
+
+    # Display the grid
+    # Note: imshow displays (row, col), so we might need to transpose if x is col and y is row
+    # In Mesa: x is usually column, y is row. 
+    # Imshow: axis 0 is y (row), axis 1 is x (col).
+    # So we transpose to match standard cartesian visualization where x is horizontal
+    ax.imshow(np.transpose(rgb_grid, (1, 0, 2)), origin='upper', extent=[0, GRID_WIDTH, GRID_HEIGHT, 0])
+    
+    # Draw grid lines
+    ax.set_xticks(np.arange(0, GRID_WIDTH, 1))
+    ax.set_yticks(np.arange(0, GRID_HEIGHT, 1))
+    ax.grid(which='both', color='w', linestyle='-', linewidth=1)
+    
+    # Set tick labels to be 1-based (1 to 25)
+    # We want the label to be centered in the cell.
+    # The extent is 0 to 25. The centers are 0.5, 1.5, ... 24.5
+    ax.set_xticks(np.arange(0.5, GRID_WIDTH, 1))
+    ax.set_yticks(np.arange(0.5, GRID_HEIGHT, 1))
+    ax.set_xticklabels(range(1, GRID_WIDTH + 1))
+    ax.set_yticklabels(range(1, GRID_HEIGHT + 1))
     ax.tick_params(left=False, bottom=False, labeltop=True, labelbottom=False)
     
     ax.set_title(f"Step: {current_step.value} | Vehicles: {vehicle_count}", fontsize=14)

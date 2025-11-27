@@ -1,6 +1,7 @@
 import mesa
 from mesa import Model
-from mesa.space import ContinuousSpace
+from mesa.space import ContinuousSpace, MultiGrid
+
 from mesa.datacollection import DataCollector
 import networkx as nx
 from agents import VehicleAgent, TrafficLightAgent, TrafficManagerAgent
@@ -11,34 +12,41 @@ ROAD = 1
 ROUNDABOUT = 2
 PARKING = 3
 EMPTY = -1
-MEDIAN = 4
+MEDIAN = 4 # Used for thick lines in app.py, but here we can use it for logic if needed.
+GREEN_ZONE = 5
+RED_ZONE = 6
 
 class TrafficModel(Model):
     def __init__(self, num_vehicles=50): 
         super().__init__()
-        self.num_vehicles = num_vehicles 
+        self.num_vehicles = num_vehicles
         self.vehicles_spawned = 0        
         self.step_count = 0
         
-        # --- CONFIGURACIÓN DE COOLDOWN (ESPERA) ---
+        self.grid = MultiGrid(25, 25, torus=False)
+        # self.schedule = RandomActivation(self) # Removed in Mesa 3.0
+        self.running = True      # --- CONFIGURACIÓN DE COOLDOWN (ESPERA) ---
         # 30 pasos = 3 segundos reales aprox. (si speed=0.1)
         self.spawn_cooldown = 30 
         self.parking_schedule = {} 
         
         # --- ESPACIO Y AGENTES ---
-        # Grid de 24x24
-        self.space = ContinuousSpace(x_max=24, y_max=24, torus=False)
+        # Grid de 25x25
+        self.space = ContinuousSpace(x_max=25, y_max=25, torus=False)
         self.agents_list = [] 
         # Inicializamos con EMPTY en lugar de BUILDING
-        self.city_layout = [[EMPTY for y in range(24)] for x in range(24)]
+        self.city_layout = [[EMPTY for y in range(25)] for x in range(25)]
         self.graph = nx.DiGraph()
         self.parking_spots = {} 
         self.traffic_lights = [] 
         
         # Construimos el mapa (calles y conexiones)
         self.build_city_graph()
+        self.build_city_graph()
         self.build_buildings()
-        self.build_medians()
+        self.build_static_zones()
+        self.median_lines = []
+        self.build_median_lines()
         
         # ===================================================
         #       1. GESTORES DE TRÁFICO (CEREBROS)
@@ -82,10 +90,10 @@ class TrafficModel(Model):
         # Posiciones basadas en los bloques rojos de la imagen
         # (x, y, manager)
         light_position = [
-            (21, 5, m1),
+            (22, 5, m1),
             (3, 5, m2),
             (3, 9, m3),
-            (21, 11, m4),
+            (22, 11, m4),
             (8, 22, m5),
             (13, 22, m6),
             (12, 1, m7), (12, 2, m7) # Bloque doble arriba
@@ -104,23 +112,23 @@ class TrafficModel(Model):
         # Posiciones basadas en los bloques amarillos de la imagen
         # IDs arbitrarios para mapear
         self.parking_spots = {
-             13: (3, 3),
-             2: (13, 3),
-             10: (20, 3),
-             17: (8, 7),
-             5: (13, 7),
-             8: (19, 8),
-             12: (3, 13),
-             15: (8, 15),
-             3: (14, 15),
-             7: (19, 13),
-             16: (8, 19),
-             1: (13, 19),
-             11: (22, 16),
-             14: (3, 21),
-             4: (13, 21),
-             6: (19, 19),
-             9: (20, 21)
+             13: (3, 3),   # User: 4,4
+             2: (13, 3),   # User: 14,4
+             10: (20, 2),  # User: 21,3
+             17: (7, 6),   # User: 8,7
+             5: (14, 6),   # User: 15,7
+             8: (19, 7),   # User: 20,8
+             12: (3, 12),  # User: 4,13
+             15: (6, 15),  # User: 7,16
+             3: (14, 14),  # User: 15,15
+             7: (19, 12),  # User: 20,13
+             16: (6, 18),  # User: 7,19
+             1: (12, 18),  # User: 13,19
+             11: (21, 16), # User: 22,17
+             14: (4, 21),  # User: 5,22
+             4: (14, 21),  # User: 15,22
+             6: (18, 19),  # User: 19,20
+             9: (20, 21)   # User: 21,22
         }
         
         # Inicializamos historial de uso
@@ -206,8 +214,11 @@ class TrafficModel(Model):
         self.datacollector.collect(self)
         self.random.shuffle(self.agents_list)
         
-        for agent in self.agents_list:
-            agent.step()
+        # Mesa 3.0: Use agents.shuffle_do("step") instead of schedule.step()
+        self.agents.shuffle_do("step")
+        
+        # for agent in self.agents_list:
+        #     agent.step()
         for agent in self.agents_list:
             if hasattr(agent, "advance"):
                 agent.advance()     
@@ -277,7 +288,9 @@ class TrafficModel(Model):
         # ---------------------------------------------------
         # Cuadro café en (10,9) a (11,10) (Indices)
         # Imagen: x=11-12, y=10-11 -> Indices x=10-11, y=9-10
-        for x in range(10, 12):
+        # Cuadro café en (10,10) a (11,11) (Indices 9-10)
+        # User: 10,10; 10,11; 11,10; 11,11 -> Indices: 9,9; 9,10; 10,9; 10,10
+        for x in range(9, 11):
             for y in range(9, 11):
                 self.city_layout[x][y] = ROUNDABOUT
         
@@ -297,51 +310,151 @@ class TrafficModel(Model):
     # =======================================================
     #               CONSTRUCCIÓN DE EDIFICIOS
     # =======================================================
+    # =======================================================
+    #               CONSTRUCCIÓN DE EDIFICIOS
+    # =======================================================
     def build_buildings(self):
         # Helper para llenar rectángulos de edificios
         def fill_rect(x1, x2, y1, y2):
             for x in range(x1, x2 + 1):
                 for y in range(y1, y2 + 1):
-                    # Solo sobrescribir si está vacío (no borrar carreteras)
                     if self.city_layout[x][y] == EMPTY:
                         self.city_layout[x][y] = BUILDING
 
-        # Coordenadas basadas en la imagen (Indices 0-23)
-        # --- FILA SUPERIOR ---
-        fill_rect(2, 3, 2, 3)     # C3-4, R3-4
-        fill_rect(5, 7, 2, 3)     # C6-8, R3-4
-        fill_rect(12, 21, 2, 3)   # C13-22, R3-4
+        # Coordenadas exactas basadas en la lista del usuario (0-indexed)
         
-        # --- FILA SEGUNDA ---
-        fill_rect(2, 3, 6, 7)     # C3-4, R7-8
-        fill_rect(5, 7, 6, 7)     # C6-8, R7-8
-        fill_rect(12, 21, 6, 7)   # C13-22, R7-8
+        # Edificio 1: (3,3)-(4,4) -> (2,2)-(3,3)
+        fill_rect(2, 3, 2, 3)
         
-        # --- FILA TERCERA ---
-        fill_rect(2, 3, 12, 15)   # C3-4, R13-16
-        fill_rect(5, 7, 12, 15)   # C6-8, R13-16
-        fill_rect(12, 15, 12, 14) # C13-16, R13-15
-        fill_rect(17, 21, 12, 21) # C18-22, R13-22 (Gran bloque derecho)
+        # Edificio 2: (7,3)-(8,4) -> (6,2)-(7,3)
+        fill_rect(6, 7, 2, 3)
         
-        # --- FILA INFERIOR ---
-        fill_rect(2, 7, 18, 21)   # C3-8, R19-22 (Gran bloque izquierdo)
-        fill_rect(12, 15, 17, 21) # C13-16, R18-22
+        # Edificio 3: (3,7)-(4,8) -> (2,6)-(3,7)
+        # User says: 3,7; 3,8; 4,7; 4,7 (implying 4,8 is empty)
+        fill_rect(2, 2, 6, 7)
+        fill_rect(3, 3, 6, 6)
+        
+        # Edificio 4: (7,7)-(8,8) -> (6,6)-(7,7)
+        fill_rect(6, 7, 6, 7)
+        
+        # Edificio 5:
+        # (13,3)-(22,3) -> (12,2)-(21,2)
+        fill_rect(12, 21, 2, 2)
+        # (13,4)-(22,4) -> (12,3)-(21,3)
+        fill_rect(12, 21, 3, 3)
+        
+        # Edificio 6:
+        # (13,7)-(22,7) -> (12,6)-(21,6)
+        fill_rect(12, 21, 6, 6)
+        # (13,8)-(22,8) -> (12,7)-(21,7)
+        fill_rect(12, 21, 7, 7)
+        
+        # Edificio 7:
+        # (3,13)-(3,16) -> (2,12)-(2,15)
+        fill_rect(2, 2, 12, 15)
+        # (4,13)-(4,16) -> (3,12)-(3,15)
+        fill_rect(3, 3, 12, 15)
+        
+        # Edificio 8:
+        # (7,15)-(7,16) -> (6,14)-(6,15) (User says 7,15; 7,16)
+        fill_rect(6, 6, 14, 15)
+        # (8,13)-(8,16) -> (7,12)-(7,15)
+        fill_rect(7, 7, 12, 15)
+        
+        # Edificio 9:
+        # (3,19)-(8,19) -> (2,18)-(7,18)
+        fill_rect(2, 7, 18, 18)
+        # (3,20)-(8,20) -> (2,19)-(7,19)
+        fill_rect(2, 7, 19, 19)
+        # (3,21)-(8,21) -> (2,20)-(7,20)
+        fill_rect(2, 7, 20, 20)
+        # (3,22)-(8,22) -> (2,21)-(7,21)
+        fill_rect(2, 7, 21, 21)
+        
+        # Edificio 10:
+        # (13,13)-(16,13) -> (12,12)-(15,12)
+        fill_rect(12, 15, 12, 12)
+        # (13,14)-(16,14) -> (12,13)-(15,13)
+        fill_rect(12, 15, 13, 13)
+        # (13,15)-(16,15) -> (12,14)-(15,14)
+        fill_rect(12, 15, 14, 14)
+        
+        # Edificio 11:
+        # (13,18)-(16,18) -> (12,17)-(15,17)
+        fill_rect(12, 15, 17, 17)
+        # (13,19)-(16,19) -> (12,18)-(15,18)
+        fill_rect(12, 15, 18, 18)
+        # (13,20)-(16,20) -> (12,19)-(15,19)
+        fill_rect(12, 15, 19, 19)
+        # (13,21)-(16,21) -> (12,20)-(15,20)
+        fill_rect(12, 15, 20, 20)
+        # (13,22)-(16,22) -> (12,21)-(15,21)
+        fill_rect(12, 15, 21, 21)
+        
+        # Edificio 12:
+        # (19,13)-(22,22) -> (18,12)-(21,21)
+        fill_rect(18, 21, 12, 21)
 
     # =======================================================
-    #               CONSTRUCCIÓN DE CAMELLONES (VERDE)
+    #               ZONAS ESTÁTICAS (ROJO/VERDE)
     # =======================================================
-    def build_medians(self):
-        def fill_median(x1, x2, y1, y2):
-            for x in range(x1, x2 + 1):
-                for y in range(y1, y2 + 1):
-                    if self.city_layout[x][y] == EMPTY:
-                        self.city_layout[x][y] = MEDIAN
+    def build_static_zones(self):
+        # Green Zones (Indices 0-23)
+        # User: 1,4; 2,4 -> 0,3; 1,3
+        # User: 1,8; 2,8 -> 0,7; 1,7
+        # User: 9,22; 10,22 -> 8,21; 9,21
+        # User: 11,3; 12,3 -> 10,2; 11,2
+        # User: 17,22; 18,22 -> 16,21; 17,21
+        # User: 23,7; 24,7 -> 22,6; 23,6
+        # User: 23,13; 24,13 -> 22,12; 23,12
+        green_coords = [
+            (0,3), (1,3),
+            (0,7), (1,7),
+            (8,21), (9,21),
+            (10,2), (11,2),
+            (16,21), (17,21),
+            (22,6), (23,6),
+            (22,12), (23,12)
+        ]
+        for x, y in green_coords:
+            if 0 <= x < 25 and 0 <= y < 25:
+                self.city_layout[x][y] = GREEN_ZONE
 
-        # Coordenadas basadas en la imagen (Indices 0-23)
-        fill_median(0, 1, 3, 3)     # C1-2, R4
-        fill_median(0, 1, 7, 7)     # C1-2, R8
-        fill_median(10, 11, 2, 2)   # C11-12, R3
-        fill_median(22, 23, 6, 6)   # C23-24, R7
-        fill_median(22, 23, 12, 12) # C23-24, R13
-        fill_median(7, 8, 21, 21)   # C8-9, R22
-        fill_median(15, 16, 21, 21) # C16-17, R22
+        # Red Zones (Indices 0-23)
+        # User: 3,5; 3,6 -> 2,4; 2,5
+        # User: 3,9; 3,10 -> 2,8; 2,9
+        # User: 8,23; 8,24 -> 7,22; 7,23
+        # User: 13,1; 13,2 -> 12,0; 12,1
+        # User: 15,23; 15,24 -> 14,22; 14,23
+        # User: 22,5; 22,6 -> 21,4; 21,5
+        # User: 22,11; 22,12 -> 21,10; 21,11
+        red_coords = [
+            (2,4), (2,5),
+            (2,8), (2,9),
+            (7,22), (7,23),
+            (12,0), (12,1),
+            (14,22), (14,23),
+            (21,4), (21,5),
+            (21,10), (21,11)
+        ]
+        for x, y in red_coords:
+            if 0 <= x < 25 and 0 <= y < 25:
+                self.city_layout[x][y] = RED_ZONE
+
+    # =======================================================
+    #               CAMELLONES (LÍNEAS GRUESAS)
+    # =======================================================
+    def build_median_lines(self):
+        # Vertical lines (x=10.5 -> between col 11 and 12)
+        # Segment 1: Row 1 to 9 (y=0 to y=8) -> y range [0, 9]
+        self.median_lines.append(((10.5, 0), (10.5, 9)))
+        
+        # Segment 2: Row 12 to 24 (y=11 to y=23) -> y range [11, 24]
+        self.median_lines.append(((10.5, 11), (10.5, 24)))
+        
+        # Horizontal lines (y=9.5 -> between row 10 and 11)
+        # Segment 1: Col 1 to 9 (x=0 to x=8) -> x range [0, 9]
+        self.median_lines.append(((0, 9.5), (9, 9.5)))
+        
+        # Segment 2: Col 12 to 24 (x=11 to x=23) -> x range [11, 24]
+        self.median_lines.append(((11, 9.5), (24, 9.5)))
