@@ -7,7 +7,7 @@ from model import SyncModel
 MODEL_WIDTH = 74
 MODEL_HEIGHT = 74
 WS_HOST = "localhost"
-WS_PORT = 8000
+WS_PORT = 8765
 
 # Instanciamos el modelo
 model = SyncModel(width=MODEL_WIDTH, height=MODEL_HEIGHT)
