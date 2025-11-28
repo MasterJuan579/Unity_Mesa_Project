@@ -540,6 +540,11 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 23692822031514048, guid: 486263a6295235a40a3ba56b8111437e,
+        type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 31321ba15b8f8eb4c954353edc038b1d, type: 2}
     - target: {fileID: 23951429543110816, guid: 486263a6295235a40a3ba56b8111437e,
         type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
@@ -680,6 +685,11 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 23692822031514048, guid: 486263a6295235a40a3ba56b8111437e,
+        type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 31321ba15b8f8eb4c954353edc038b1d, type: 2}
     - target: {fileID: 23951429543110816, guid: 486263a6295235a40a3ba56b8111437e,
         type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
@@ -752,6 +762,11 @@ PrefabInstance:
       propertyPath: m_ConstrainProportionsScale
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: 23692822031514048, guid: 486263a6295235a40a3ba56b8111437e,
+        type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 31321ba15b8f8eb4c954353edc038b1d, type: 2}
     - target: {fileID: 23951429543110816, guid: 486263a6295235a40a3ba56b8111437e,
         type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
@@ -981,6 +996,11 @@ PrefabInstance:
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
       objectReference: {fileID: 2100000, guid: b46491bf8bcc7974e9c5b185ed3a64df, type: 2}
+    - target: {fileID: 23667093023974842, guid: 3a8c76fe5ec38c6458fcafb62cb2a0d9,
+        type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 31321ba15b8f8eb4c954353edc038b1d, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -1200,6 +1220,11 @@ PrefabInstance:
       propertyPath: m_ConstrainProportionsScale
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: 23036822953466824, guid: 57671d8d7e3c6ac4484342e67b69f13a,
+        type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 31321ba15b8f8eb4c954353edc038b1d, type: 2}
     - target: {fileID: 23363762547648504, guid: 57671d8d7e3c6ac4484342e67b69f13a,
         type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
