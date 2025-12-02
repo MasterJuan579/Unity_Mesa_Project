@@ -80,7 +80,19 @@ class TrafficModel(Model):
         
         # Manager 7: Top Center (Col 12, Row 1)
         m7 = TrafficManagerAgent("Manager7", self, green_time=20)
-        m7.activate()
+        # m7.activate() # Don't activate all at once
+        
+        # Link Managers in a Cycle to ensure continuous flow
+        m1.set_next(m2)
+        m2.set_next(m3)
+        m3.set_next(m4)
+        m4.set_next(m5)
+        m5.set_next(m6)
+        m6.set_next(m7)
+        m7.set_next(m1)
+        
+        # Start the cycle
+        m1.activate()
 
         self.agents_list.extend([m1, m2, m3, m4, m5, m6, m7])
         
@@ -90,13 +102,23 @@ class TrafficModel(Model):
         # Posiciones basadas en los bloques rojos de la imagen
         # (x, y, manager)
         light_position = [
-            (22, 5, m1),
-            (3, 5, m2),
-            (3, 9, m3),
-            (22, 11, m4),
-            (8, 22, m5),
-            (13, 22, m6),
-            (12, 1, m7), (12, 2, m7) # Bloque doble arriba
+            # Semáforos Verdes
+            (1, 4, m2), (2, 4, m2),
+            (1, 8, m3), (2, 8, m3),
+            (9, 22, m5), (10, 22, m5),
+            (11, 3, m7), (12, 3, m7),
+            (17, 22, m6), (18, 22, m6), # Split again
+            (23, 7, m4), (24, 7, m4), 
+            (23, 13, m4), (24, 13, m4),
+
+            # Semáforos Rojos
+            (3, 5, m2), (3, 6, m2), # Split again
+            (3, 9, m3), (3, 10, m3),
+            (8, 23, m5), (8, 24, m5),
+            (13, 1, m7), (13, 2, m7),
+            (15, 23, m6), (15, 24, m6),
+            (22, 5, m1), (22, 6, m1), # Split again
+            (22, 11, m4), (22, 12, m4)
         ]
         
         for (x, y, manager) in light_position:
@@ -112,23 +134,23 @@ class TrafficModel(Model):
         # Posiciones basadas en los bloques amarillos de la imagen
         # IDs arbitrarios para mapear
         self.parking_spots = {
-             13: (3, 3),   # User: 4,4
-             2: (13, 3),   # User: 14,4
-             10: (20, 2),  # User: 21,3
-             17: (7, 6),   # User: 8,7
-             5: (14, 6),   # User: 15,7
-             8: (19, 7),   # User: 20,8
-             12: (3, 12),  # User: 4,13
-             15: (6, 15),  # User: 7,16
-             3: (14, 14),  # User: 15,15
-             7: (19, 12),  # User: 20,13
-             16: (6, 18),  # User: 7,19
-             1: (12, 18),  # User: 13,19
-             11: (21, 16), # User: 22,17
-             14: (4, 21),  # User: 5,22
-             4: (14, 21),  # User: 15,22
-             6: (18, 19),  # User: 19,20
-             9: (20, 21)   # User: 21,22
+             13: (4, 4),
+             2: (14, 4),
+             10: (21, 3),
+             17: (8, 7),
+             5: (15, 7),
+             8: (20, 8),
+             12: (4, 13),
+             15: (7, 16),
+             3: (15, 15),
+             7: (20, 13),
+             16: (7, 19),
+             1: (13, 19),
+             11: (22, 17),
+             14: (5, 22),
+             4: (15, 22),
+             6: (19, 20),
+             9: (21, 22)
         }
         
         # Inicializamos historial de uso
@@ -230,7 +252,6 @@ class TrafficModel(Model):
     def build_city_graph(self):
         def add_line(start, end, direction, weight=1):
             curr = list(start)
-            # Asegurar que el bucle termine
             max_iters = 100
             iters = 0
             while iters < max_iters:
@@ -238,7 +259,8 @@ class TrafficModel(Model):
                 
                 # Añadir nodo actual
                 self.graph.add_node(node_curr)
-                self.city_layout[curr[0]][curr[1]] = ROAD
+                # Cast to int for grid access
+                self.city_layout[int(curr[0])][int(curr[1])] = ROAD
                 
                 if curr == list(end):
                     break
@@ -247,52 +269,83 @@ class TrafficModel(Model):
                 next_y = curr[1] + direction[1]
                 node_next = (next_x, next_y)
                 
-                if not (0 <= next_x < 73 and 0 <= next_y < 73): break
+                # Check bounds
+                if not (0 <= next_x < 74 and 0 <= next_y < 74): break
                 
                 self.graph.add_node(node_next)
                 self.graph.add_edge(node_curr, node_next, weight=weight)
-                self.city_layout[next_x][next_y] = ROAD
+                self.city_layout[int(next_x)][int(next_y)] = ROAD
                 
                 curr[0], curr[1] = next_x, next_y
                 iters += 1
 
-        # ---------------------------------------------------
-        # 1. PERÍMETRO (Ring Exterior)
-        # ---------------------------------------------------
-        add_line((23, 0), (0, 0), (-1, 0))   # Top (Left)
-        add_line((0, 0), (0, 23), (0, 1))    # Left (Down)
-        add_line((0, 23), (23, 23), (1, 0))  # Bottom (Right)
-        add_line((23, 23), (23, 0), (0, -1)) # Right (Up)
+        # ===================================================
+        #       DEFINICIÓN DE CALLES (Basado en Coordenadas Usuario)
+        # ===================================================
+        
+        # ===================================================
+        #       DEFINICIÓN DE CALLES (Unidireccionales)
+        # ===================================================
+        
+        # --- CALLES VERTICALES ---
+        # V1: X=1 (Perímetro Izquierdo) -> DOWN
+        add_line((1, 23), (1, 1), (0, -1))
 
-        # ---------------------------------------------------
-        # 2. CARRETERAS VERTICALES
-        # ---------------------------------------------------
-        add_line((3, 3), (3, 22), (0, 1))    # Col 4 (Down)
-        add_line((8, 3), (8, 22), (0, 1))    # Col 9 (Down)
-        add_line((11, 3), (11, 22), (0, 1))  # Col 12 (Down)
-        add_line((12, 22), (12, 3), (0, -1)) # Col 13 (Up)
-        add_line((15, 12), (15, 22), (0, 1)) # Col 16 (Down) - Ajustado inicio
-        add_line((20, 3), (20, 22), (0, 1))  # Col 21 (Down)
+        # V2: X=5, X=6 (Entre Edificios 1/3/7 y 2/4/8) -> DOWN (Dos carriles)
+        add_line((5, 18), (5, 1), (0, -1))
+        add_line((6, 18), (6, 1), (0, -1))
 
-        # ---------------------------------------------------
-        # 3. CARRETERAS HORIZONTALES
-        # ---------------------------------------------------
-        add_line((23, 5), (0, 5), (-1, 0))   # Row 6 (Left)
-        add_line((23, 9), (0, 9), (-1, 0))   # Row 10 (Left)
-        add_line((0, 11), (23, 11), (1, 0))  # Row 12 (Right)
-        add_line((12, 16), (0, 16), (-1, 0)) # Row 17 Left (Left)
-        add_line((0, 17), (12, 17), (1, 0))  # Row 18 Left (Right)
+        # V3: X=9 (Entre Edificios 2/4/8 y Glorieta) -> DOWN
+        add_line((9, 23), (9, 1), (0, -1))
+
+        # V4: X=12 (Entre Glorieta y Edificios 5/6/10/11) -> UP
+        add_line((12, 1), (12, 23), (0, 1))
+
+        # V5: X=17, X=18 (Entre Edificios 10/11 y 12) -> UP (Dos carriles)
+        add_line((17, 1), (17, 23), (0, 1))
+        add_line((18, 1), (18, 23), (0, 1))
+
+        # V6: X=23 (Perímetro Derecho) -> UP
+        add_line((23, 1), (23, 23), (0, 1))
+
+
+        # --- CALLES HORIZONTALES ---
+        # H1: Y=2 (Perímetro Superior) -> LEFT
+        add_line((23, 2), (1, 2), (-1, 0))
+
+        # H2: Y=5, Y=6 (Entre Edificios 1/2/5 y 3/4/6) -> LEFT (Dos carriles)
+        add_line((23, 5), (1, 5), (-1, 0))
+        add_line((23, 6), (1, 6), (-1, 0))
+
+        # H3: Y=9 (Arriba de Glorieta) -> LEFT
+        add_line((23, 9), (1, 9), (-1, 0))
+
+        # H4: Y=12 (Abajo de Glorieta) -> RIGHT
+        add_line((1, 12), (23, 12), (1, 0))
+
+        # H5: Y=17, Y=18 (Entre Edificios 7/8/10/12 y 9/11) -> RIGHT (Dos carriles)
+        add_line((1, 17), (23, 17), (1, 0))
+        add_line((1, 18), (23, 18), (1, 0))
+
+        # H6: Y=23 (Perímetro Inferior) -> RIGHT
+        add_line((1, 23), (23, 23), (1, 0))
 
         # ---------------------------------------------------
         # 4. ROTONDA CENTRAL / CRUCE
         # ---------------------------------------------------
-        # Cuadro café en (10,9) a (11,10) (Indices)
-        # Imagen: x=11-12, y=10-11 -> Indices x=10-11, y=9-10
-        # Cuadro café en (10,10) a (11,11) (Indices 9-10)
-        # User: 10,10; 10,11; 11,10; 11,11 -> Indices: 9,9; 9,10; 10,9; 10,10
-        for x in range(9, 11):
-            for y in range(9, 11):
+        # Coordenadas Usuario: 10,10 - 11,11
+        for x in range(10, 12):
+            for y in range(10, 12):
                 self.city_layout[x][y] = ROUNDABOUT
+        
+        # Conectar rotonda a calles adyacentes (X=9, X=12, Y=9, Y=12)
+        # Esto se hace implícitamente si las calles tocan, pero la rotonda es un obstáculo?
+        # En el modelo anterior, la rotonda era transitable o tenía lógica especial?
+        # Asumimos que las calles rodean la rotonda.
+        # V3 (X=9) toca (9,10) y (9,11).
+        # V4 (X=12) toca (12,10) y (12,11).
+        # H3 (Y=9) toca (10,9) y (11,9).
+        # H4 (Y=12) toca (10,12) y (11,12).
         
         # ---------------------------------------------------
         # 5. CONEXIÓN DE ESTACIONAMIENTOS
@@ -301,99 +354,43 @@ class TrafficModel(Model):
         for pid, pos in self.parking_spots.items():
             self.graph.add_node(pos)
             self.city_layout[pos[0]][pos[1]] = PARKING
-            nearest = min(road_nodes, key=lambda n: (n[0]-pos[0])**2 + (n[1]-pos[1])**2)
-            self.graph.add_edge(pos, nearest, weight=1)
-            self.graph.add_edge(nearest, pos, weight=1)
+            # Encontrar nodo de calle más cercano
+            if road_nodes:
+                nearest = min(road_nodes, key=lambda n: (n[0]-pos[0])**2 + (n[1]-pos[1])**2)
+                self.graph.add_edge(pos, nearest, weight=1)
+                self.graph.add_edge(nearest, pos, weight=1)
     # =======================================================
     #               CONSTRUCCIÓN DE EDIFICIOS
     # =======================================================
     # =======================================================
     #               CONSTRUCCIÓN DE EDIFICIOS
-    # =======================================================
-    # =======================================================
-    #               CONSTRUCCIÓN DE EDIFICIOS
-    # =======================================================
     def build_buildings(self):
-        # Helper para llenar rectángulos de edificios
-        def fill_rect(x1, x2, y1, y2):
-            for x in range(x1, x2 + 1):
-                for y in range(y1, y2 + 1):
+        """
+        Coloca celdas tipo BUILDING en las zonas ocupadas por edificios.
+        Basado en las coordenadas del usuario.
+        """
+        # Lista de rectángulos (x_min, y_min, x_max, y_max) INCLUSIVOS
+        buildings_rects = [
+            (3, 3, 4, 4),    # Edificio 1
+            (7, 3, 8, 4),    # Edificio 2
+            (3, 7, 4, 8),    # Edificio 3
+            (7, 7, 8, 8),    # Edificio 4
+            (13, 3, 22, 4),  # Edificio 5
+            (13, 7, 22, 8),  # Edificio 6
+            (3, 13, 4, 16),  # Edificio 7
+            (7, 13, 8, 16),  # Edificio 8 (aprox, user said 7,15-16 & 8,13-16)
+            (3, 19, 8, 22),  # Edificio 9 (Bloque grande)
+            (13, 13, 16, 15),# Edificio 10
+            (13, 18, 16, 22),# Edificio 11
+            (19, 13, 22, 22) # Edificio 12
+        ]
+
+        for (x_min, y_min, x_max, y_max) in buildings_rects:
+            for x in range(x_min, x_max + 1):
+                for y in range(y_min, y_max + 1):
+                    # Solo marcar si no es otra cosa (aunque BUILDING suele ser base)
                     if self.city_layout[x][y] == EMPTY:
                         self.city_layout[x][y] = BUILDING
-
-        # Coordenadas exactas basadas en la lista del usuario (0-indexed)
-        
-        # Edificio 1: (3,3)-(4,4) -> (2,2)-(3,3)
-        fill_rect(2, 3, 2, 3)
-        
-        # Edificio 2: (7,3)-(8,4) -> (6,2)-(7,3)
-        fill_rect(6, 7, 2, 3)
-        
-        # Edificio 3: (3,7)-(4,8) -> (2,6)-(3,7)
-        # User says: 3,7; 3,8; 4,7; 4,7 (implying 4,8 is empty)
-        fill_rect(2, 2, 6, 7)
-        fill_rect(3, 3, 6, 6)
-        
-        # Edificio 4: (7,7)-(8,8) -> (6,6)-(7,7)
-        fill_rect(6, 7, 6, 7)
-        
-        # Edificio 5:
-        # (13,3)-(22,3) -> (12,2)-(21,2)
-        fill_rect(12, 21, 2, 2)
-        # (13,4)-(22,4) -> (12,3)-(21,3)
-        fill_rect(12, 21, 3, 3)
-        
-        # Edificio 6:
-        # (13,7)-(22,7) -> (12,6)-(21,6)
-        fill_rect(12, 21, 6, 6)
-        # (13,8)-(22,8) -> (12,7)-(21,7)
-        fill_rect(12, 21, 7, 7)
-        
-        # Edificio 7:
-        # (3,13)-(3,16) -> (2,12)-(2,15)
-        fill_rect(2, 2, 12, 15)
-        # (4,13)-(4,16) -> (3,12)-(3,15)
-        fill_rect(3, 3, 12, 15)
-        
-        # Edificio 8:
-        # (7,15)-(7,16) -> (6,14)-(6,15) (User says 7,15; 7,16)
-        fill_rect(6, 6, 14, 15)
-        # (8,13)-(8,16) -> (7,12)-(7,15)
-        fill_rect(7, 7, 12, 15)
-        
-        # Edificio 9:
-        # (3,19)-(8,19) -> (2,18)-(7,18)
-        fill_rect(2, 7, 18, 18)
-        # (3,20)-(8,20) -> (2,19)-(7,19)
-        fill_rect(2, 7, 19, 19)
-        # (3,21)-(8,21) -> (2,20)-(7,20)
-        fill_rect(2, 7, 20, 20)
-        # (3,22)-(8,22) -> (2,21)-(7,21)
-        fill_rect(2, 7, 21, 21)
-        
-        # Edificio 10:
-        # (13,13)-(16,13) -> (12,12)-(15,12)
-        fill_rect(12, 15, 12, 12)
-        # (13,14)-(16,14) -> (12,13)-(15,13)
-        fill_rect(12, 15, 13, 13)
-        # (13,15)-(16,15) -> (12,14)-(15,14)
-        fill_rect(12, 15, 14, 14)
-        
-        # Edificio 11:
-        # (13,18)-(16,18) -> (12,17)-(15,17)
-        fill_rect(12, 15, 17, 17)
-        # (13,19)-(16,19) -> (12,18)-(15,18)
-        fill_rect(12, 15, 18, 18)
-        # (13,20)-(16,20) -> (12,19)-(15,19)
-        fill_rect(12, 15, 19, 19)
-        # (13,21)-(16,21) -> (12,20)-(15,20)
-        fill_rect(12, 15, 20, 20)
-        # (13,22)-(16,22) -> (12,21)-(15,21)
-        fill_rect(12, 15, 21, 21)
-        
-        # Edificio 12:
-        # (19,13)-(22,22) -> (18,12)-(21,21)
-        fill_rect(18, 21, 12, 21)
 
     # =======================================================
     #               ZONAS ESTÁTICAS (ROJO/VERDE)

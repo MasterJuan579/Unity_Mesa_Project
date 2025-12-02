@@ -32,6 +32,29 @@ async def process_message(message: str):
     # Por ahora, el modelo corre por su cuenta.
     pass
 
+async def send_graph(ws):
+    """Envía la estructura del grafo (nodos y aristas) a Unity para depuración."""
+    graph_data = {
+        "type": "grid",
+        "nodes": [],
+        "edges": []
+    }
+    
+    # Extraer nodos
+    for node in model.graph.nodes:
+        # node es una tupla (x, y)
+        graph_data["nodes"].append({"x": float(node[0]), "y": float(node[1])})
+        
+    # Extraer aristas
+    for u, v in model.graph.edges:
+        graph_data["edges"].append({
+            "u": {"x": float(u[0]), "y": float(u[1])},
+            "v": {"x": float(v[0]), "y": float(v[1])}
+        })
+        
+    msg = json.dumps(graph_data)
+    await ws.send(msg)
+
 async def broadcast_state():
     """Envía el estado de todos los agentes a Unity."""
     if not connected:
@@ -88,6 +111,8 @@ async def handler(ws):
     try:
         # Enviar estado inicial
         await broadcast_state()
+        # Enviar grafo para debug visual
+        await send_graph(ws)
         
         async for message in ws:
             await process_message(message)

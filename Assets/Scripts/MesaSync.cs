@@ -18,6 +18,9 @@ public class MesaSync : MonoBehaviour
     // Opción para intercambiar ejes si la orientación está rotada 90 grados
     public bool swapAxes = false;
 
+    // Estructura para almacenar el grafo de debug
+    private List<Vector3[]> debugEdges = new List<Vector3[]>();
+
     // Diccionario para mantener referencia a los GameObjects de los agentes
     Dictionary<string, GameObject> unityAgents = new Dictionary<string, GameObject>();
 
@@ -62,10 +65,43 @@ public class MesaSync : MonoBehaviour
                     var agents = (JArray)data["agents"];
                     ApplyMesaState(agents);
                 }
+                else if (type == "grid")
+                {
+                    Debug.Log("Received GRID message from server.");
+                    ParseGrid(data);
+                }
+                else 
+                {
+                    Debug.Log("Received unknown message type: " + type);
+                }
             } catch (System.Exception e) {
                 Debug.LogError("Error parsing message: " + e.Message);
             }
         });
+    }
+
+    private void ParseGrid(JObject data)
+    {
+        debugEdges.Clear();
+        var edges = (JArray)data["edges"];
+        foreach (var edge in edges)
+        {
+            float ux = (float)edge["u"]["x"];
+            float uy = (float)edge["u"]["y"];
+            float vx = (float)edge["v"]["x"];
+            float vy = (float)edge["v"]["y"];
+
+            Vector3 u, v;
+            if (swapAxes) {
+                u = new Vector3(uy * scaleFactor, 0, ux * scaleFactor);
+                v = new Vector3(vy * scaleFactor, 0, vx * scaleFactor);
+            } else {
+                u = new Vector3(ux * scaleFactor, 0, uy * scaleFactor);
+                v = new Vector3(vx * scaleFactor, 0, vy * scaleFactor);
+            }
+            debugEdges.Add(new Vector3[] { u, v });
+        }
+        Debug.Log($"Received graph with {debugEdges.Count} edges.");
     }
 
     private void ApplyMesaState(JArray agents)
@@ -108,11 +144,22 @@ public class MesaSync : MonoBehaviour
             // Actualizamos posición si existe
             if (unityAgents.ContainsKey(id)) {
                 // Interpolación simple o movimiento directo
-                // Usamos localPosition para que dependa de dónde pongas el AgentsRoot
-                // Asumimos que Y en Unity es Up, y en Mesa es Z (o plano XZ)
-                // Mesa (x, y) -> Unity (x, 0, z) ? O (x, 0, y)?
-                // Generalmente Mesa Y -> Unity Z
-                unityAgents[id].transform.localPosition = new Vector3(x, 0f, y);
+                Vector3 newPos = new Vector3(x, 0f, y);
+                Vector3 oldPos = unityAgents[id].transform.localPosition;
+                
+                // Calculamos dirección para rotar el coche
+                Vector3 direction = newPos - oldPos;
+                if (direction.sqrMagnitude > 0.001f) // Solo rotar si se mueve
+                {
+                    // Usamos LookRotation relativo al padre (AgentsRoot)
+                    // Pero LookRotation funciona en espacio mundial o local?
+                    // Transform.rotation es mundial. Transform.localRotation es local.
+                    // La dirección calculada es en espacio local de AgentsRoot.
+                    // Para aplicar rotación local correcta:
+                    unityAgents[id].transform.localRotation = Quaternion.LookRotation(direction);
+                }
+
+                unityAgents[id].transform.localPosition = newPos;
             }
         }
 
@@ -185,6 +232,18 @@ public class MesaSync : MonoBehaviour
             Vector3 pY = agentsRoot.TransformPoint(new Vector3(0, 0, 20));
             Gizmos.DrawLine(p00, pY);
             Gizmos.DrawSphere(pY, 0.5f);
+
+            // Dibujar grafo de caminos (Road Network)
+            Gizmos.color = Color.cyan;
+            foreach (var edge in debugEdges)
+            {
+                Vector3 start = agentsRoot.TransformPoint(edge[0]);
+                Vector3 end = agentsRoot.TransformPoint(edge[1]);
+                Gizmos.DrawLine(start, end);
+                // Dibujar nodos (extremos de las líneas)
+                Gizmos.DrawSphere(start, 0.3f);
+                Gizmos.DrawSphere(end, 0.3f);
+            }
         }
     }
 }
