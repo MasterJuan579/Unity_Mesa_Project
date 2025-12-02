@@ -7,23 +7,18 @@ import numpy as np
 import time
 import asyncio
 
-from model import TrafficModel, BUILDING, ROAD, ROUNDABOUT, PARKING, EMPTY, MEDIAN, GREEN_ZONE, RED_ZONE
+from model import TrafficModel, BUILDING, ROAD, ROUNDABOUT, PARKING
 from agents import VehicleAgent, TrafficLightAgent
 
 # --- CONFIGURATION ---
-# --- CONFIGURATION ---
-GRID_WIDTH = 74
-GRID_HEIGHT = 74
+GRID_WIDTH = 25
+GRID_HEIGHT = 25
 
 COLOR_MAP = {
     BUILDING: "#4682B4",   # Steel Blue
     ROAD: "#D3D3D3",       # Light Gray
     ROUNDABOUT: "#8B4513", # Saddle Brown
-    PARKING: "#FFD700",    # Gold
-    EMPTY: "#FFFFFF",      # White
-    MEDIAN: "#32CD32",     # Lime Green (Not used for lines, maybe for old medians)
-    GREEN_ZONE: "#00B050", # Green Zone (Semáforo)
-    RED_ZONE: "#FF0000"    # Red Zone (Semáforo)
+    PARKING: "#FFD700"     # Gold
 }
 
 AGENT_COLORS = {
@@ -56,96 +51,77 @@ def step_model():
         model_state.value = model_state.value 
         current_step.value += 1
 
-def create_city_visualization(model):
-    # Create figure and axis
-    fig, ax = plt.subplots(figsize=(8.5, 8.5))
+def create_city_visualization(model: TrafficModel) -> Figure:
+    fig, ax = plt.subplots(figsize=(10, 10))
     
-    # Draw the grid
-    city_data = np.zeros((GRID_WIDTH, GRID_HEIGHT))
-    
-    # Fill grid with colors based on agent type
+    # 1. DRAW MAP
+    rects = []
+    colors = []
     for x in range(GRID_WIDTH):
         for y in range(GRID_HEIGHT):
-            cell_contents = model.grid.get_cell_list_contents((x, y))
-            # Default to road color
-            color_val = 0.2 # Light gray for road
-            
-            # Check for static layout first
-            layout_type = model.city_layout[x][y]
-            if layout_type == BUILDING:
-                color_val = 0.8 # Blue for buildings
-            elif layout_type == ROUNDABOUT:
-                color_val = 0.9 # Brown for roundabout
-            elif layout_type == GREEN_ZONE:
-                color_val = 0.6 # Green for static zone
-            elif layout_type == RED_ZONE:
-                color_val = 0.7 # Red for static zone
-            elif layout_type == EMPTY: # Should be road/empty
-                color_val = 0.2
-            
-            # Check for dynamic agents
-            if cell_contents:
-                for agent in cell_contents:
-                    if isinstance(agent, TrafficLightAgent):
-                        if agent.state: # Green
-                            color_val = 0.6
-                        else: # Red
-                            color_val = 0.7
-            
-            # We'll use a custom colormap, so we just store integers/floats mapping to types
-            # Let's use the COLOR_MAP keys directly if possible, or map to them
-            # Simplified approach: create an RGB grid directly
-            pass
+            cell_type = CITY_LAYOUT[x][y]
+            # CORRECCIÓN: Usar (x, y) directamente
+            rect = patches.Rectangle((x, y), 1, 1)
+            rects.append(rect)
+            colors.append(COLOR_MAP[cell_type])
 
-    # Re-implement using imshow with direct colors for simplicity
-    # Create an RGB array
-    rgb_grid = np.zeros((GRID_WIDTH, GRID_HEIGHT, 3))
+    collection = PatchCollection(rects, facecolors=colors, edgecolors='white', linewidths=0.5, zorder=0)
+    ax.add_collection(collection)
     
-    vehicle_count = 0 # Initialize vehicle count for the title
+    # 2. DRAW PARKING
+    for pid, pos in model.parking_spots.items():
+        px, py = pos
+        border = patches.Rectangle((px, py), 1, 1, linewidth=2, edgecolor='black', facecolor='none', zorder=5)
+        ax.add_patch(border)
+        ax.text(px + 0.5, py + 0.5, "P", color='black', fontsize=10, ha='center', va='center', fontweight='bold', zorder=6)
 
-    for x in range(GRID_WIDTH):
-        for y in range(GRID_HEIGHT):
-            # Default background (Road/Empty)
-            color_hex = COLOR_MAP[ROAD]
+    # 3. DRAW AGENTS
+    vehicle_count = 0
+    
+    for agent in model.agents_list:
+        # --- NUEVA PROTECCIÓN ---
+        # Los TrafficManagerAgent no tienen posición física.
+        # Si intentamos leer agent.pos, daría error. Los saltamos.
+        if not hasattr(agent, "pos") or agent.pos is None:
+            continue
+        
+        # Mesa guarda posiciones como (float, float). Ej: (12.5, 3.5)
+        x, y = agent.pos
+        
+        if isinstance(agent, VehicleAgent):
+            vehicle_count += 1
+            color = AGENT_COLORS["moving"]
+            if agent.speed < 0.01:
+                color = AGENT_COLORS["stopped"]
             
-            # 1. Draw Static Layout
-            layout_type = model.city_layout[x][y]
-            if layout_type in COLOR_MAP:
-                color_hex = COLOR_MAP[layout_type]
-                
-            # 2. Draw Agents (override static)
-            cell_contents = model.grid.get_cell_list_contents((x, y))
-            for agent in cell_contents:
-                if isinstance(agent, VehicleAgent): # Changed from CarAgent to VehicleAgent
-                    vehicle_count += 1
-                    color_hex = AGENT_COLORS["moving"]
-                    if agent.speed < 0.01:
-                        color_hex = AGENT_COLORS["stopped"]
-                elif isinstance(agent, TrafficLightAgent):
-                    color_hex = AGENT_COLORS["light_green"] if agent.state == "GREEN" else AGENT_COLORS["light_red"] # Adjusted to use AGENT_COLORS and state string
+            circle = patches.Circle((x, y), radius=0.35, facecolor=color, edgecolor='white', linewidth=1, zorder=15)
+            ax.add_patch(circle)
             
-            # Convert hex to rgb
-            rgb_grid[x, y] = [int(color_hex[1:3], 16)/255, int(color_hex[3:5], 16)/255, int(color_hex[5:7], 16)/255]
+        elif isinstance(agent, TrafficLightAgent):
+            # El agente físico lee el estado de su manager automáticamente aquí
+            if agent.state == "GREEN": c = AGENT_COLORS["light_green"]
+            elif agent.state == "YELLOW": c = AGENT_COLORS["light_yellow"]
+            else: c = AGENT_COLORS["light_red"]
+            
+            rect = patches.Rectangle(
+                (x - 0.5, y - 0.5), 
+                1.0, 1.0, 
+                facecolor=c, 
+                edgecolor='none', 
+                alpha=0.6, 
+                zorder=20
+            )
+            ax.add_patch(rect)
 
-    # Display the grid
-    # Note: imshow displays (row, col), so we might need to transpose if x is col and y is row
-    # In Mesa: x is usually column, y is row. 
-    # Imshow: axis 0 is y (row), axis 1 is x (col).
-    # So we transpose to match standard cartesian visualization where x is horizontal
-    ax.imshow(np.transpose(rgb_grid, (1, 0, 2)), origin='upper', extent=[0, GRID_WIDTH, GRID_HEIGHT, 0])
+    ax.set_aspect("equal")
+    ax.set_xlim(0, 25)
+    ax.set_ylim(0, 25)
+    ax.invert_yaxis()
     
-    # Draw grid lines
-    ax.set_xticks(np.arange(0, GRID_WIDTH, 1))
-    ax.set_yticks(np.arange(0, GRID_HEIGHT, 1))
-    ax.grid(which='both', color='w', linestyle='-', linewidth=1)
-    
-    # Set tick labels to be 1-based (1 to 25)
-    # We want the label to be centered in the cell.
-    # The extent is 0 to 25. The centers are 0.5, 1.5, ... 24.5
-    ax.set_xticks(np.arange(0.5, GRID_WIDTH, 1))
-    ax.set_yticks(np.arange(0.5, GRID_HEIGHT, 1))
-    ax.set_xticklabels(range(1, GRID_WIDTH + 1))
-    ax.set_yticklabels(range(1, GRID_HEIGHT + 1))
+    ax.set_xticks(np.arange(0.5, 25.5, 1))
+    ax.set_yticks(np.arange(0.5, 25.5, 1))
+    ax.set_xticklabels(range(25))
+    ax.set_yticklabels(range(25))
     ax.tick_params(left=False, bottom=False, labeltop=True, labelbottom=False)
     
     ax.set_title(f"Step: {current_step.value} | Vehicles: {vehicle_count}", fontsize=14)
@@ -202,7 +178,7 @@ def TrafficSimulation():
             solara.Button("▶️ Play", color="success", on_click=lambda: is_playing.set(True), block=True)
         solara.Button("⏭️ Step +1", color="info", on_click=step_model, disabled=is_playing.value, block=True)
         solara.SliderFloat("Speed", value=play_speed, min=0.01, max=1.0, step=0.05)
-        solara.SliderInt("Vehicles", value=num_vehicles_param, min=1, max=50)
+        solara.SliderInt("Vehicles", value=num_vehicles_param, min=1, max=100)
         StatisticsPanel()
 
     with solara.Column(style={"padding": "20px", "align-items": "center"}):
