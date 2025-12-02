@@ -31661,6 +31661,8 @@ MonoBehaviour:
   agentPrefab: {fileID: 919132149155446097, guid: 42c8f6b44ddf4514d9a3ce6fb4ced093,
     type: 3}
   agentsRoot: {fileID: 1968019155}
+  scaleFactor: 3.0833
+  swapAxes: 1
 --- !u!4 &755888144
 Transform:
   m_ObjectHideFlags: 0
@@ -50594,7 +50596,7 @@ Transform:
   m_GameObject: {fileID: 1381986642}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -120.965485, y: 0, z: -3.7498398}
+  m_LocalPosition: {x: -120.965485, y: 1, z: -3.7498398}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -74926,8 +74928,8 @@ Transform:
   m_GameObject: {fileID: 1968019154}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: -0.7071068, z: 0, w: 0.7071068}
-  m_LocalPosition: {x: -74.93, y: 1, z: -7.5}
-  m_LocalScale: {x: 1.35, y: 1.35, z: 1.35}
+  m_LocalPosition: {x: -67.04, y: 1, z: -36.97}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 0}

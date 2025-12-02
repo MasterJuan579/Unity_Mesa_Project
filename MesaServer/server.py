@@ -2,51 +2,67 @@
 import asyncio
 import websockets
 import json
-from model import SyncModel
+import sys
+import os
+
+# Añadimos el directorio Modelos al path para que model.py pueda importar agents
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../Modelos')))
+
+from model import TrafficModel
+from agents import VehicleAgent, TrafficLightAgent
 
 MODEL_WIDTH = 74
 MODEL_HEIGHT = 74
 WS_HOST = "localhost"
 WS_PORT = 8765
 
-# Instanciamos el modelo
-model = SyncModel(width=MODEL_WIDTH, height=MODEL_HEIGHT)
+# Instanciamos el modelo real
+model = TrafficModel(num_vehicles=50)
 connected = set()
 
 async def process_message(message: str):
-    """Procesa mensajes JSON desde Unity."""
+    """Procesa mensajes JSON desde Unity (si los hubiera)."""
     try:
         data = json.loads(message)
     except Exception as e:
         print("Error parseando JSON:", e)
         return
 
-    msg_type = data.get("type", "")
-    
-    if msg_type == "update":
-        for ag in data.get("agents", []):
-            aid = int(ag["id"])
-            x = int(ag["x"])
-            y = int(ag["y"])
-            
-            if aid not in model.agents_dict:
-                print(f"Creando agente {aid} en ({x}, {y})")
-                model.add_agent(aid, x, y)
-            else:
-                model.move_agent(aid, x, y)
-                
-    elif msg_type == "remove":
-        for ag in data.get("agents", []):
-            aid = int(ag["id"])
-            print(f"Eliminando agente {aid}")
-            model.remove_agent(aid)
+    # Aquí podrías manejar comandos desde Unity si fuera necesario
+    # Por ahora, el modelo corre por su cuenta.
+    pass
 
 async def broadcast_state():
     """Envía el estado de todos los agentes a Unity."""
     if not connected:
         return
         
-    agents_data = model.serialize_grid()
+    agents_data = []
+    
+    # Recolectamos datos de los agentes
+    for agent in model.agents_list:
+        # Verificamos que el agente tenga posición válida
+        if agent.pos is None:
+            continue
+
+        # Serializamos Vehículos
+        if isinstance(agent, VehicleAgent):
+            agents_data.append({
+                "id": agent.unique_id,
+                "x": float(agent.pos[0]), # Float para movimiento suave
+                "y": float(agent.pos[1]),
+                "type": "car"
+            })
+        # Serializamos Semáforos (Opcional, para visualizar estado)
+        elif isinstance(agent, TrafficLightAgent):
+            agents_data.append({
+                "id": agent.unique_id,
+                "x": float(agent.pos[0]),
+                "y": float(agent.pos[1]),
+                "state": agent.state,
+                "type": "traffic_light"
+            })
+
     world_state = {
         "type": "update", 
         "agents": agents_data
@@ -54,8 +70,16 @@ async def broadcast_state():
     msg = json.dumps(world_state)
     
     # Enviar a todos los clientes conectados
-    # websockets 10+ maneja el broadcast de forma eficiente
     await asyncio.gather(*[ws.send(msg) for ws in connected])
+
+async def simulation_loop():
+    """Bucle principal de la simulación."""
+    while True:
+        if connected:
+            model.step()
+            await broadcast_state()
+        # Controlamos la velocidad de la simulación (aprox 10-20 FPS)
+        await asyncio.sleep(0.1) 
 
 async def handler(ws):
     """Maneja la conexión de un cliente (Unity)."""
@@ -67,7 +91,6 @@ async def handler(ws):
         
         async for message in ws:
             await process_message(message)
-            await broadcast_state()
             
     except websockets.ConnectionClosed:
         print("Unity desconectado ❌")
@@ -75,6 +98,9 @@ async def handler(ws):
         connected.remove(ws)
 
 async def main():
+    # Iniciamos el bucle de simulación en background
+    asyncio.create_task(simulation_loop())
+    
     async with websockets.serve(handler, WS_HOST, WS_PORT):
         print(f"Servidor Mesa corriendo en ws://{WS_HOST}:{WS_PORT} 🚀")
         await asyncio.Future()  # run forever
