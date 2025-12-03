@@ -16,9 +16,17 @@ MODEL_HEIGHT = 74
 WS_HOST = "localhost"
 WS_PORT = 8765
 
-# Instanciamos el modelo real
-model = TrafficModel(num_vehicles=50)
+# Instancia global del modelo (la vamos a reiniciar cuando Unity le dé Play)
+model = None
 connected = set()
+
+
+def reset_model():
+    """Crea un nuevo modelo desde cero."""
+    global model
+    model = TrafficModel(num_vehicles=50)
+    print("🔄 Modelo de tráfico reiniciado")
+
 
 async def process_message(message: str):
     """Procesa mensajes JSON desde Unity (si los hubiera)."""
@@ -32,8 +40,12 @@ async def process_message(message: str):
     # Por ahora, el modelo corre por su cuenta.
     pass
 
+
 async def send_graph(ws):
     """Envía la estructura del grafo (nodos y aristas) a Unity para depuración."""
+    if model is None:
+        return
+
     graph_data = {
         "type": "grid",
         "nodes": [],
@@ -55,9 +67,10 @@ async def send_graph(ws):
     msg = json.dumps(graph_data)
     await ws.send(msg)
 
+
 async def broadcast_state():
     """Envía el estado de todos los agentes a Unity."""
-    if not connected:
+    if not connected or model is None:
         return
         
     agents_data = []
@@ -65,14 +78,14 @@ async def broadcast_state():
     # Recolectamos datos de los agentes
     for agent in model.agents_list:
         # Verificamos que el agente tenga posición válida
-        if agent.pos is None:
+        if getattr(agent, "pos", None) is None:
             continue
 
         # Serializamos Vehículos
         if isinstance(agent, VehicleAgent):
             agents_data.append({
                 "id": agent.unique_id,
-                "x": float(agent.pos[0]), # Float para movimiento suave
+                "x": float(agent.pos[0]),  # Float para movimiento suave
                 "y": float(agent.pos[1]),
                 "type": "car"
             })
@@ -95,24 +108,39 @@ async def broadcast_state():
     # Enviar a todos los clientes conectados
     await asyncio.gather(*[ws.send(msg) for ws in connected])
 
+
 async def simulation_loop():
     """Bucle principal de la simulación."""
+    global model
     while True:
-        if connected:
+        # Solo avanza el modelo si:
+        # - Hay al menos un cliente conectado
+        # - Ya tenemos un modelo creado (después de reset_model)
+        if connected and model is not None:
             model.step()
             await broadcast_state()
         # Controlamos la velocidad de la simulación (aprox 10-20 FPS)
         await asyncio.sleep(0.1) 
 
+
 async def handler(ws):
     """Maneja la conexión de un cliente (Unity)."""
+    global connected
     print("Unity conectado 🎮")
+
+    # 👉 Detectamos si este es el PRIMER cliente (o sea, cuando le das Play)
+    first_client = (len(connected) == 0)
     connected.add(ws)
+
+    if first_client:
+        # Solo cuando el primer cliente entra, reiniciamos el modelo
+        reset_model()
+
     try:
+        # Enviar grafo para debug visual (con el modelo recién reiniciado)
+        await send_graph(ws)
         # Enviar estado inicial
         await broadcast_state()
-        # Enviar grafo para debug visual
-        await send_graph(ws)
         
         async for message in ws:
             await process_message(message)
@@ -121,6 +149,8 @@ async def handler(ws):
         print("Unity desconectado ❌")
     finally:
         connected.remove(ws)
+        print("Clientes conectados ahora:", len(connected))
+
 
 async def main():
     # Iniciamos el bucle de simulación en background
@@ -129,6 +159,7 @@ async def main():
     async with websockets.serve(handler, WS_HOST, WS_PORT):
         print(f"Servidor Mesa corriendo en ws://{WS_HOST}:{WS_PORT} 🚀")
         await asyncio.Future()  # run forever
+
 
 if __name__ == "__main__":
     try:
