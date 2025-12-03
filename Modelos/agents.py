@@ -149,14 +149,21 @@ class VehicleAgent(Agent):
                 if next_step_pos is not None:
                     my_direction = np.array(next_step_pos) - current_pos
                     vector_to_other = other_pos - current_pos
-                    if np.dot(my_direction, vector_to_other) > 0:
-                        is_in_front = True
+                    
+                    norm_dir = np.linalg.norm(my_direction)
+                    norm_other = np.linalg.norm(vector_to_other)
+                    
+                    if norm_dir > 0 and norm_other > 0:
+                        # Normalize and check angle (approx 25 degrees -> 0.9)
+                        dot_product = np.dot(my_direction / norm_dir, vector_to_other / norm_other)
+                        if dot_product > 0.9:
+                            is_in_front = True
 
                 if is_in_front:
                     if dist < 0.9:
                         emergency_brake = True
                         obstacle_ahead = True
-                    elif dist < 1.9:
+                    elif dist < 1.2:
                         obstacle_ahead = True
             
             # --- Detección de Semáforos ---

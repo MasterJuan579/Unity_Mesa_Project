@@ -9,11 +9,16 @@ public class MesaSync : MonoBehaviour
     public static MesaSync Instance;
     private WebSocket websocket;
     public GameObject agentPrefab;
+    public GameObject trafficLightPrefab;
     public Transform agentsRoot;
     
-    // Factor de escala para adaptar coordenadas de Mesa (0-24) a Unity (0-74)
-    // 74 / 24 = 3.08333...
-    public float scaleFactor = 3.0833f;
+    // Factor de escala independiente por eje
+    public float scaleX = 3.0833f;
+    public float scaleZ = 3.0833f;
+    
+    // Desplazamiento manual para ajuste fino
+    public float offsetX = 0.0f;
+    public float offsetZ = 0.0f;
     
     // Opción para intercambiar ejes si la orientación está rotada 90 grados
     public bool swapAxes = false;
@@ -93,11 +98,11 @@ public class MesaSync : MonoBehaviour
 
             Vector3 u, v;
             if (swapAxes) {
-                u = new Vector3(uy * scaleFactor, 0, ux * scaleFactor);
-                v = new Vector3(vy * scaleFactor, 0, vx * scaleFactor);
+                u = new Vector3(uy * scaleX + offsetX, 0, ux * scaleZ + offsetZ);
+                v = new Vector3(vy * scaleX + offsetX, 0, vx * scaleZ + offsetZ);
             } else {
-                u = new Vector3(ux * scaleFactor, 0, uy * scaleFactor);
-                v = new Vector3(vx * scaleFactor, 0, vy * scaleFactor);
+                u = new Vector3(ux * scaleX + offsetX, 0, uy * scaleZ + offsetZ);
+                v = new Vector3(vx * scaleX + offsetX, 0, vy * scaleZ + offsetZ);
             }
             debugEdges.Add(new Vector3[] { u, v });
         }
@@ -118,11 +123,11 @@ public class MesaSync : MonoBehaviour
             
             float x, y;
             if (swapAxes) {
-                x = rawY * scaleFactor;
-                y = rawX * scaleFactor;
+                x = rawY * scaleX + offsetX;
+                y = rawX * scaleZ + offsetZ;
             } else {
-                x = rawX * scaleFactor;
-                y = rawY * scaleFactor;
+                x = rawX * scaleX + offsetX;
+                y = rawY * scaleZ + offsetZ;
             }
 
             string type = (string)a["type"];
@@ -131,35 +136,46 @@ public class MesaSync : MonoBehaviour
 
             if (!unityAgents.ContainsKey(id))
             {
-                // Solo instanciamos coches por ahora
                 if (type == "car") {
                     var go = Instantiate(agentPrefab, agentsRoot);
                     go.name = "Agent_" + id;
-                    // var ctrl = go.GetComponent<AgentController>();
-                    // if (ctrl != null) ctrl.agentID = id; // ID string issue?
                     unityAgents[id] = go;
+                }
+                else if (type == "traffic_light") {
+                    if (trafficLightPrefab != null) {
+                        var go = Instantiate(trafficLightPrefab, agentsRoot);
+                        go.name = "TL_" + id;
+                        unityAgents[id] = go;
+                    }
                 }
             }
 
             // Actualizamos posición si existe
             if (unityAgents.ContainsKey(id)) {
-                // Interpolación simple o movimiento directo
                 Vector3 newPos = new Vector3(x, 0f, y);
-                Vector3 oldPos = unityAgents[id].transform.localPosition;
                 
-                // Calculamos dirección para rotar el coche
-                Vector3 direction = newPos - oldPos;
-                if (direction.sqrMagnitude > 0.001f) // Solo rotar si se mueve
-                {
-                    // Usamos LookRotation relativo al padre (AgentsRoot)
-                    // Pero LookRotation funciona en espacio mundial o local?
-                    // Transform.rotation es mundial. Transform.localRotation es local.
-                    // La dirección calculada es en espacio local de AgentsRoot.
-                    // Para aplicar rotación local correcta:
-                    unityAgents[id].transform.localRotation = Quaternion.LookRotation(direction);
+                if (type == "car") {
+                    // Interpolación simple o movimiento directo
+                    Vector3 oldPos = unityAgents[id].transform.localPosition;
+                    
+                    // Calculamos dirección para rotar el coche
+                    Vector3 direction = newPos - oldPos;
+                    if (direction.sqrMagnitude > 0.001f) 
+                    {
+                        unityAgents[id].transform.localRotation = Quaternion.LookRotation(direction);
+                    }
+                    unityAgents[id].transform.localPosition = newPos;
                 }
-
-                unityAgents[id].transform.localPosition = newPos;
+                else if (type == "traffic_light") {
+                    // Los semáforos son estáticos en posición, pero actualizamos su estado
+                    unityAgents[id].transform.localPosition = newPos;
+                    
+                    var ctrl = unityAgents[id].GetComponent<TrafficLightController>();
+                    if (ctrl != null) {
+                        string state = (string)a["state"]; // Asegúrate de que el servidor envíe "state"
+                        ctrl.SetState(state);
+                    }
+                }
             }
         }
 
