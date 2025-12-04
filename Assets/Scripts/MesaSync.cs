@@ -263,14 +263,23 @@ public class MesaSync : MonoBehaviour
     // Método para actualizar un semáforo por ID
     private void UpdateTrafficLight(string id, string state)
     {
+        Debug.Log($"[MESA] Recibido semáforo ID: '{id}' Estado: '{state}'");
+        
         foreach (var tl in trafficLights)
         {
-            if (tl != null && tl.trafficLightId == id)
+            if (tl != null)
             {
-                tl.SetState(state);
-                return;
+                Debug.Log($"[UNITY] Comparando con: '{tl.trafficLightId}'");
+                if (tl.trafficLightId == id)
+                {
+                    Debug.Log($"[MATCH] ¡Encontrado! Actualizando {id}");
+                    tl.SetState(state);
+                    return;
+                }
             }
         }
+        
+        Debug.LogWarning($"[NO MATCH] No se encontró semáforo con ID: {id}");
     }
 
     public async Task SendAgentUpdate(int id, int x, int y)

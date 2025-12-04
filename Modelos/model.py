@@ -80,11 +80,17 @@ class TrafficModel(Model):
         # --- GRUPO 1 ---
         m1_1 = TrafficManagerAgent("Manager1.1", self, green_time=40)
         m1_2 = TrafficManagerAgent("Manager1.2", self, green_time=40)
-        m1_1.set_next(m1_2); m1_2.set_next(m1_1); m1_1.activate()
+        m1_3 = TrafficManagerAgent("Manager1.3", self, green_time=40)
+        m1_1.set_next(m1_2); m1_3.set_next(m1_1); m1_2.set_next(m1_3); m1_1.activate()
         
         m2_1 = TrafficManagerAgent("Manager2.1", self, green_time=40)
         m2_2 = TrafficManagerAgent("Manager2.2", self, green_time=40)
         m2_1.set_next(m2_2); m2_2.set_next(m2_1); m2_1.activate()
+        
+        m5_1 = TrafficManagerAgent("Manager5.1", self, green_time=40)
+        m5_2 = TrafficManagerAgent("Manager5.2", self, green_time=40)
+        m5_1.set_next(m5_2); m5_2.set_next(m5_1); m5_1.activate()
+        
         
         m3_1 = TrafficManagerAgent("Manager3.1", self, green_time=40)
         m3_2 = TrafficManagerAgent("Manager3.2", self, green_time=40)
@@ -94,13 +100,17 @@ class TrafficModel(Model):
         m4_2 = TrafficManagerAgent("Manager4.2", self, green_time=40)
         m4_1.set_next(m4_2); m4_2.set_next(m4_1); m4_1.activate()
         
-        self.agents_list.extend([m1_1, m1_2, m2_1, m2_2, m3_1, m3_2, m4_1, m4_2])
+        m6_1 = TrafficManagerAgent("Manager6.1", self, green_time=40)
+        m6_2 = TrafficManagerAgent("Manager6.2", self, green_time=40)
+        m6_1.set_next(m6_2); m4_2.set_next(m6_1); m6_1.activate()
+        
+        self.agents_list.extend([m1_1, m1_2, m1_3, m2_1, m2_2, m3_1, m3_2, m4_1, m4_2, m5_1, m5_2, m6_1, m6_2, ])
         
         # --- SEMAFOROS ---
         light_position = [
-            (0, 3, m1_1), (1, 3, m1_1), (2, 4, m1_2), (2, 5, m1_2), (2, 8, m1_2), (2, 9, m1_2),
+            (0, 3, m1_1), (1, 3, m1_1), (2, 4, m1_3), (2, 5, m1_3), (2, 8, m1_2), (2, 9, m1_2),
             (7, 23, m2_1), (7, 24, m2_1), (8, 22, m2_2), (9, 22, m2_2),
-            (16, 23, m2_1), (16, 24, m2_1), (17, 22, m2_2), (18, 22, m2_2),
+            (16, 23, m5_1), (16, 24, m5_1), (17, 22, m5_2), (18, 22, m5_2),
             (11, 2, m3_1), (12, 2, m3_1), (13, 0, m3_2), (13, 1, m3_2),
             (22, 4, m4_1), (22, 5, m4_1), (22, 11, m4_1), (22, 12, m4_1),
             (23, 6, m4_2), (24, 6, m4_2), (23, 13, m4_2), (24, 13, m4_2),
