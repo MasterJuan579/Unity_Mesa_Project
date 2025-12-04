@@ -14322,8 +14322,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PanoramicCamera
   target: {fileID: 1885839184}
   rotationSpeed: 8
-  distance: 45
-  height: 10
+  distance: 50
+  height: 20
 --- !u!1001 &508963071
 PrefabInstance:
   m_ObjectHideFlags: 0
