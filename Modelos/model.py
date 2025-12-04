@@ -117,7 +117,7 @@ class TrafficModel(Model):
              1: (21, 2), 2: (22, 16), 3: (15, 22), 4: (4, 22),   
              5: (21, 22), 6: (13, 19), 7: (20, 13), 8: (3, 13),
              9: (3, 3), 10: (7, 6), 11: (14, 3), 12: (15, 6), 13: (20, 7),
-             14: (6, 15), 15: (6, 18), 16: (15, 15), 17: (19, 20)
+             14: (6, 16), 15: (6, 19), 16: (15, 15), 17: (19, 20)
         }
         for pid in self.parking_spots:
             self.parking_schedule[pid] = -self.spawn_cooldown
@@ -432,15 +432,15 @@ class TrafficModel(Model):
         self.graph.add_edge((23, 9), (22, 9), weight=1)
         
         # F. 
-        add_line((1, 16), (8, 16), (1, 0)) 
         add_line((1, 17), (8, 17), (1, 0)) 
+        add_line((1, 18), (8, 18), (1, 0)) 
         
-        self.graph.add_edge((4, 16), (5, 17), weight=3)
-        self.graph.add_edge((4, 17), (5, 16), weight=3)
-        self.graph.add_edge((1, 15), (1, 16), weight=1)
-        self.graph.add_edge((1, 16), (1, 17), weight=1) 
-        self.graph.add_edge((8, 16), (8, 17), weight=1)
+        self.graph.add_edge((4, 17), (5, 18), weight=3)
+        self.graph.add_edge((4, 18), (5, 17), weight=3)
+        self.graph.add_edge((1, 16), (1, 17), weight=1)
+        self.graph.add_edge((1, 17), (1, 18), weight=1) 
         self.graph.add_edge((8, 17), (8, 18), weight=1)
+        self.graph.add_edge((8, 18), (8, 19), weight=1)
         
         # G.
         add_line((17, 16), (12, 16), (-1, 0)) 
