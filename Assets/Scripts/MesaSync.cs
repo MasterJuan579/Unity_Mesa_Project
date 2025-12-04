@@ -10,8 +10,21 @@ public class MesaSync : MonoBehaviour
     private WebSocket websocket;
 
     [Header("Prefabs y jerarquía")]
-    public GameObject agentPrefab;
+    public GameObject agentPrefab;          // Prefab por defecto para coches (compatibilidad con tu versión actual)
     public Transform agentsRoot;
+
+    [System.Serializable]
+    public class CarPrefabEntry
+    {
+        public string carType;              // p.ej. "sedan", "truck", "sport"
+        public GameObject prefab;           // Prefab del coche en Unity
+    }
+
+    [Tooltip("Lista opcional de prefabs para distintos tipos de coches, según el campo 'car_type' que venga desde Mesa.")]
+    public List<CarPrefabEntry> carPrefabs = new List<CarPrefabEntry>();
+
+    // Mapa interno para buscar rápido el prefab según el tipo
+    private Dictionary<string, GameObject> carPrefabMap = new Dictionary<string, GameObject>();
 
     [Header("Coordenadas Mesa → Unity")]
     public float scaleFactor = 3.0833f;
@@ -30,6 +43,24 @@ public class MesaSync : MonoBehaviour
     async void Awake()
     {
         Instance = this;
+
+        // Construir mapa de tipos de coche → prefab
+        carPrefabMap.Clear();
+        foreach (var entry in carPrefabs)
+        {
+            if (entry != null && entry.prefab != null && !string.IsNullOrEmpty(entry.carType))
+            {
+                if (!carPrefabMap.ContainsKey(entry.carType))
+                {
+                    carPrefabMap.Add(entry.carType, entry.prefab);
+                }
+                else
+                {
+                    Debug.LogWarning($"CarPrefabEntry duplicado para carType '{entry.carType}'. Se usará el primero que se registró.");
+                }
+            }
+        }
+
         websocket = new WebSocket("ws://localhost:8765");
 
         websocket.OnOpen += () =>
@@ -217,10 +248,25 @@ public class MesaSync : MonoBehaviour
             // COCHES
             if (agentType == "car")
             {
+                // Intentamos leer el tipo de coche desde el JSON: "car_type"
+                // Si no viene, se queda en null y usaremos el prefab por defecto (agentPrefab).
+                string carType = null;
+                if (a["car_type"] != null && a["car_type"].Type != JTokenType.Null)
+                {
+                    carType = (string)a["car_type"];
+                }
+
                 if (!unityAgents.ContainsKey(id))
                 {
-                    var go = Instantiate(agentPrefab, agentsRoot);
-                    go.name = "Agent_" + id;
+                    GameObject prefabToUse = GetCarPrefab(carType);
+                    if (prefabToUse == null)
+                    {
+                        Debug.LogError($"No se encontró prefab para el coche con id '{id}'. Asegúrate de asignar 'agentPrefab' o la lista 'carPrefabs'.");
+                        continue;
+                    }
+
+                    var go = Instantiate(prefabToUse, agentsRoot);
+                    go.name = string.IsNullOrEmpty(carType) ? $"Agent_{id}" : $"Agent_{id}_{carType}";
                     unityAgents[id] = go;
                 }
 
@@ -258,6 +304,25 @@ public class MesaSync : MonoBehaviour
             Destroy(unityAgents[id]);
             unityAgents.Remove(id);
         }
+    }
+
+    // Devuelve el prefab adecuado para el tipo de coche recibido
+    private GameObject GetCarPrefab(string carType)
+    {
+        // Si viene un tipo y existe en el mapa, lo usamos
+        if (!string.IsNullOrEmpty(carType) && carPrefabMap.TryGetValue(carType, out var prefab) && prefab != null)
+        {
+            return prefab;
+        }
+
+        // Si no hay tipo o no está configurado, usamos el prefab general que ya tenías
+        if (agentPrefab != null)
+        {
+            return agentPrefab;
+        }
+
+        // Si tampoco hay agentPrefab, devolvemos null y dejamos que el llamador decida
+        return null;
     }
 
     // Método para actualizar un semáforo por ID
