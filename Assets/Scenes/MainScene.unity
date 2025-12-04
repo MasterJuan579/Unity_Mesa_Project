@@ -14167,6 +14167,7 @@ GameObject:
   - component: {fileID: 508240590}
   - component: {fileID: 508240589}
   - component: {fileID: 508240593}
+  - component: {fileID: 508240594}
   m_Layer: 0
   m_Name: Main_Camera
   m_TagString: Untagged
@@ -14307,6 +14308,22 @@ MonoBehaviour:
   normalSpeed: 10
   fastSpeed: 50
   sensitivity: 3
+--- !u!114 &508240594
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 508240588}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 09eead2acc78024b3aa8a6bd8b4acd4a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PanoramicCamera
+  target: {fileID: 1885839184}
+  rotationSpeed: 8
+  distance: 45
+  height: 10
 --- !u!1001 &508963071
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -63137,6 +63154,7 @@ GameObject:
   - component: {fileID: 1628579598}
   - component: {fileID: 1628579597}
   - component: {fileID: 1628579596}
+  - component: {fileID: 1628579599}
   m_Layer: 0
   m_Name: Directional Light
   m_TagString: Untagged
@@ -63253,6 +63271,19 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0.764, y: -28.091, z: -3.011}
+--- !u!114 &1628579599
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1628579595}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8c7c9fe769120e715969393fa8cada21, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DayNightCycle
+  dayDuration: 60
 --- !u!1001 &1631879451
 PrefabInstance:
   m_ObjectHideFlags: 0
