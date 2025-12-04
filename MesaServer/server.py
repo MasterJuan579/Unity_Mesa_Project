@@ -8,7 +8,17 @@ import os
 # Añadimos el directorio Modelos al path para que model.py pueda importar agents
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../Modelos')))
 
-from model import TrafficModel
+from model import (
+    TrafficModel,
+    BUILDING,
+    ROAD,
+    ROUNDABOUT,
+    PARKING,
+    MEDIAN,
+    GREEN_ZONE,
+    RED_ZONE,
+    EMPTY,
+)
 from agents import VehicleAgent, TrafficLightAgent
 
 MODEL_WIDTH = 74
@@ -42,7 +52,12 @@ async def process_message(message: str):
 
 
 async def send_graph(ws):
-    """Envía la estructura del grafo (nodos y aristas) a Unity para depuración."""
+    """
+    Envía la estructura del grafo (nodos y aristas) a Unity para depuración.
+
+    OJO: sumamos +0.5 a x,y para que el grafo quede centrado en las celdas,
+    igual que los coches y el layout.
+    """
     if model is None:
         return
 
@@ -51,20 +66,59 @@ async def send_graph(ws):
         "nodes": [],
         "edges": []
     }
-    
-    # Extraer nodos
+
+    # Extraer nodos (centrados)
     for node in model.graph.nodes:
-        # node es una tupla (x, y)
-        graph_data["nodes"].append({"x": float(node[0]), "y": float(node[1])})
-        
-    # Extraer aristas
+        graph_data["nodes"].append({
+            "x": float(node[0]) + 0.5,
+            "y": float(node[1]) + 0.5
+        })
+
+    # Extraer aristas (centradas)
     for u, v in model.graph.edges:
         graph_data["edges"].append({
-            "u": {"x": float(u[0]), "y": float(u[1])},
-            "v": {"x": float(v[0]), "y": float(v[1])}
+            "u": {"x": float(u[0]) + 0.5, "y": float(u[1]) + 0.5},
+            "v": {"x": float(v[0]) + 0.5, "y": float(v[1]) + 0.5}
         })
-        
+
     msg = json.dumps(graph_data)
+    await ws.send(msg)
+
+
+async def send_layout(ws):
+    """
+    Envía un 'tilemap' con los tipos de celda del modelo:
+    - ROAD
+    - BUILDING
+    - PARKING
+    - GREEN_ZONE
+    - RED_ZONE
+    - MEDIAN
+    - ROUNDABOUT
+    """
+    if model is None:
+        return
+
+    tiles = []
+    width = len(model.city_layout)
+    height = len(model.city_layout[0])
+
+    for x in range(width):
+        for y in range(height):
+            cell_type = model.city_layout[x][y]
+            if cell_type == EMPTY:
+                continue  # Nos ahorramos mandar celdas vacías
+
+            tiles.append({
+                "x": x + 0.5,          # Centro de la celda
+                "y": y + 0.5,
+                "type": int(cell_type)
+            })
+
+    msg = json.dumps({
+        "type": "layout",
+        "tiles": tiles
+    })
     await ws.send(msg)
 
 
@@ -72,9 +126,9 @@ async def broadcast_state():
     """Envía el estado de todos los agentes a Unity."""
     if not connected or model is None:
         return
-        
+
     agents_data = []
-    
+
     # Recolectamos datos de los agentes
     for agent in model.agents_list:
         # Verificamos que el agente tenga posición válida
@@ -100,11 +154,11 @@ async def broadcast_state():
             })
 
     world_state = {
-        "type": "update", 
+        "type": "update",
         "agents": agents_data
     }
     msg = json.dumps(world_state)
-    
+
     # Enviar a todos los clientes conectados
     await asyncio.gather(*[ws.send(msg) for ws in connected])
 
@@ -120,7 +174,7 @@ async def simulation_loop():
             model.step()
             await broadcast_state()
         # Controlamos la velocidad de la simulación (aprox 10-20 FPS)
-        await asyncio.sleep(0.1) 
+        await asyncio.sleep(0.1)
 
 
 async def handler(ws):
@@ -128,7 +182,7 @@ async def handler(ws):
     global connected
     print("Unity conectado 🎮")
 
-    # 👉 Detectamos si este es el PRIMER cliente (o sea, cuando le das Play)
+    # Detectamos si este es el PRIMER cliente (o sea, cuando le das Play)
     first_client = (len(connected) == 0)
     connected.add(ws)
 
@@ -137,14 +191,16 @@ async def handler(ws):
         reset_model()
 
     try:
-        # Enviar grafo para debug visual (con el modelo recién reiniciado)
+        # 1) Enviar layout (calles / edificios / parkings...)
+        await send_layout(ws)
+        # 2) Enviar grafo para debug visual (calles como líneas cian)
         await send_graph(ws)
-        # Enviar estado inicial
+        # 3) Enviar estado inicial de agentes
         await broadcast_state()
-        
+
         async for message in ws:
             await process_message(message)
-            
+
     except websockets.ConnectionClosed:
         print("Unity desconectado ❌")
     finally:
@@ -155,7 +211,7 @@ async def handler(ws):
 async def main():
     # Iniciamos el bucle de simulación en background
     asyncio.create_task(simulation_loop())
-    
+
     async with websockets.serve(handler, WS_HOST, WS_PORT):
         print(f"Servidor Mesa corriendo en ws://{WS_HOST}:{WS_PORT} 🚀")
         await asyncio.Future()  # run forever

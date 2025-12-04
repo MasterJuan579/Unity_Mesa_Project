@@ -12,77 +12,63 @@ ROAD = 1
 ROUNDABOUT = 2
 PARKING = 3
 EMPTY = -1
-MEDIAN = 4 # Used for thick lines in app.py, but here we can use it for logic if needed.
+MEDIAN = 4  # Camellones
 GREEN_ZONE = 5
 RED_ZONE = 6
 
+
 class TrafficModel(Model):
-    def __init__(self, num_vehicles=50): 
+    def __init__(self, num_vehicles=50):
         super().__init__()
         self.num_vehicles = num_vehicles
-        self.vehicles_spawned = 0        
+        self.vehicles_spawned = 0
         self.step_count = 0
-        
+
+        # Grid lógico grande (para ser compatible con Unity 74x74)
         self.grid = MultiGrid(74, 74, torus=False)
-        # self.schedule = RandomActivation(self) # Removed in Mesa 3.0
-        self.running = True      # --- CONFIGURACIÓN DE COOLDOWN (ESPERA) ---
-        # 30 pasos = 3 segundos reales aprox. (si speed=0.1)
-        self.spawn_cooldown = 30 
-        self.parking_schedule = {} 
-        
+        self.running = True
+
+        # Cooldown de spawns
+        self.spawn_cooldown = 30
+        self.parking_schedule = {}
+
         # --- ESPACIO Y AGENTES ---
-        # Grid de 25x25
         self.space = ContinuousSpace(x_max=74, y_max=74, torus=False)
-        self.agents_list = [] 
-        # Inicializamos con EMPTY en lugar de BUILDING
-        self.city_layout = [[EMPTY for y in range(74)] for x in range(74)]
+        self.agents_list = []
+        # Layout inicial en EMPTY
+        self.city_layout = [[EMPTY for _ in range(74)] for _ in range(74)]
         self.graph = nx.DiGraph()
-        self.parking_spots = {} 
-        self.traffic_lights = [] 
-        
+        self.parking_spots = {}
+        self.traffic_lights = []
+
         # Construimos el mapa (calles y conexiones)
-        self.build_city_graph()
         self.build_city_graph()
         self.build_buildings()
         self.build_static_zones()
         self.median_lines = []
         self.build_median_lines()
-        
+
         # ===================================================
         #       1. GESTORES DE TRÁFICO (CEREBROS)
         # ===================================================
-        # Creamos managers para controlar los semáforos
-        # (Simplificado: un manager por intersección o grupo)
-        
-        # Manager 1: Top Right (Col 21, Row 5)
         m1 = TrafficManagerAgent("Manager1", self, green_time=20)
-        m1.activate()
-        
-        # Manager 2: Top Left (Col 3, Row 5)
         m2 = TrafficManagerAgent("Manager2", self, green_time=20)
-        m2.activate()
-        
-        # Manager 3: Center Left (Col 3, Row 9)
         m3 = TrafficManagerAgent("Manager3", self, green_time=20)
-        m3.activate()
-        
-        # Manager 4: Center Right (Col 21, Row 11)
         m4 = TrafficManagerAgent("Manager4", self, green_time=20)
-        m4.activate()
-        
-        # Manager 5: Bottom Left (Col 8, Row 22)
         m5 = TrafficManagerAgent("Manager5", self, green_time=20)
-        m5.activate()
-        
-        # Manager 6: Bottom Right (Col 13, Row 22)
         m6 = TrafficManagerAgent("Manager6", self, green_time=20)
-        m6.activate()
-        
-        # Manager 7: Top Center (Col 12, Row 1)
         m7 = TrafficManagerAgent("Manager7", self, green_time=20)
-        # m7.activate() # Don't activate all at once
-        
-        # Link Managers in a Cycle to ensure continuous flow
+
+        # activa algunos de inicio
+        m1.activate()
+        m2.activate()
+        m3.activate()
+        m4.activate()
+        m5.activate()
+        m6.activate()
+        # m7 lo dejamos para que entre en la cadena
+
+        # ciclo entre managers
         m1.set_next(m2)
         m2.set_next(m3)
         m3.set_next(m4)
@@ -90,37 +76,34 @@ class TrafficModel(Model):
         m5.set_next(m6)
         m6.set_next(m7)
         m7.set_next(m1)
-        
-        # Start the cycle
+
         m1.activate()
 
         self.agents_list.extend([m1, m2, m3, m4, m5, m6, m7])
-        
+
         # ===================================================
         #       2. SEMÁFOROS FÍSICOS (LUCES)
         # ===================================================
-        # Posiciones basadas en los bloques rojos de la imagen
-        # (x, y, manager)
         light_position = [
             # Semáforos Verdes
             (1, 4, m2), (2, 4, m2),
             (1, 8, m3), (2, 8, m3),
             (9, 22, m5), (10, 22, m5),
             (11, 3, m7), (12, 3, m7),
-            (17, 22, m6), (18, 22, m6), # Split again
-            (23, 7, m4), (24, 7, m4), 
+            (17, 22, m6), (18, 22, m6),
+            (23, 7, m4), (24, 7, m4),
             (23, 13, m4), (24, 13, m4),
 
             # Semáforos Rojos
-            (3, 5, m2), (3, 6, m2), # Split again
+            (3, 5, m2), (3, 6, m2),
             (3, 9, m3), (3, 10, m3),
             (8, 23, m5), (8, 24, m5),
             (13, 1, m7), (13, 2, m7),
             (15, 23, m6), (15, 24, m6),
-            (22, 5, m1), (22, 6, m1), # Split again
-            (22, 11, m4), (22, 12, m4)
+            (22, 5, m1), (22, 6, m1),
+            (22, 11, m4), (22, 12, m4),
         ]
-        
+
         for (x, y, manager) in light_position:
             pos = (x + 0.5, y + 0.5)
             tl_agent = TrafficLightAgent(f"TL_{x}_{y}", self, manager)
@@ -131,42 +114,42 @@ class TrafficModel(Model):
         # ===================================================
         #       3. ESTACIONAMIENTOS (PARKINGS)
         # ===================================================
-        # Posiciones basadas en los bloques amarillos de la imagen
-        # IDs arbitrarios para mapear
         self.parking_spots = {
-             13: (4, 4),
-             2: (14, 4),
-             10: (21, 3),
-             17: (8, 7),
-             5: (15, 7),
-             8: (20, 8),
-             12: (4, 13),
-             15: (7, 16),
-             3: (15, 15),
-             7: (20, 13),
-             16: (7, 19),
-             1: (13, 19),
-             11: (22, 17),
-             14: (5, 22),
-             4: (15, 22),
-             6: (19, 20),
-             9: (21, 22)
+            13: (4, 4),
+            2: (14, 4),
+            10: (21, 3),
+            17: (8, 7),
+            5: (15, 7),
+            8: (20, 8),
+            12: (4, 13),
+            15: (7, 16),
+            3: (15, 15),
+            7: (20, 13),
+            16: (7, 19),
+            1: (13, 19),
+            11: (22, 17),
+            14: (5, 22),
+            4: (15, 22),
+            6: (19, 20),
+            9: (21, 22),
         }
-        
-        # Inicializamos historial de uso
+
         for pid in self.parking_spots:
             self.parking_schedule[pid] = -self.spawn_cooldown
-        
+
         # ===================================================
         #       4. RECOLECCIÓN DE DATOS
         # ===================================================
         self.datacollector = DataCollector(
             model_reporters={
-                "Stopped_Cars": lambda m: sum(1 for a in m.agents_list if isinstance(a, VehicleAgent) and a.speed < 0.01),
-                "Average_Speed": lambda m: self.get_avg_speed()
+                "Stopped_Cars": lambda m: sum(
+                    1 for a in m.agents_list
+                    if isinstance(a, VehicleAgent) and a.speed < 0.01
+                ),
+                "Average_Speed": lambda m: self.get_avg_speed(),
             }
         )
-        
+
         # Generación inicial de vehículos
         self.spawn_vehicles()
 
@@ -174,76 +157,87 @@ class TrafficModel(Model):
     def get_avg_speed(self):
         speeds = [a.speed for a in self.agents_list if isinstance(a, VehicleAgent)]
         return sum(speeds) / len(speeds) if speeds else 0
-    
+
     def get_nearest_node(self, pos):
-        return min(self.graph.nodes, key=lambda n: (n[0]-pos[0])**2 + (n[1]-pos[1])**2)
+        return min(
+            self.graph.nodes,
+            key=lambda n: (n[0] - pos[0]) ** 2 + (n[1] - pos[1]) ** 2,
+        )
 
     def spawn_vehicles(self):
-        """ Genera coches nuevos respetando cooldown y espacio disponible. """
+        """Genera coches nuevos respetando cooldown y espacio disponible."""
         if self.vehicles_spawned >= self.num_vehicles:
             return
 
         parking_ids = list(self.parking_spots.keys())
         free_spots = []
-        
+
         for pid in parking_ids:
-            # Verificar Cooldown
             last_used_step = self.parking_schedule.get(pid, -999)
             if (self.step_count - last_used_step) < self.spawn_cooldown:
-                continue 
+                continue
 
-            # Verificar Espacio Físico
             pos = self.parking_spots[pid]
-            cell_contents = self.space.get_neighbors(pos, radius=0.4, include_center=True)
-            is_free = not any(isinstance(agent, VehicleAgent) for agent in cell_contents)
-            
+            cell_contents = self.space.get_neighbors(
+                pos, radius=0.4, include_center=True
+            )
+            is_free = not any(
+                isinstance(agent, VehicleAgent) for agent in cell_contents
+            )
+
             if is_free:
                 free_spots.append(pid)
 
-        self.random.shuffle(free_spots) 
-        
+        self.random.shuffle(free_spots)
+
         for start_id in free_spots:
             if self.vehicles_spawned >= self.num_vehicles:
                 break
-                
-            dest_id = self.random.choice([pid for pid in parking_ids if pid != start_id])
+
+            dest_id = self.random.choice(
+                [pid for pid in parking_ids if pid != start_id]
+            )
             start_pos = self.parking_spots[start_id]
             dest_pos = self.parking_spots[dest_id]
             start_node = self.get_nearest_node(start_pos)
             dest_node = self.get_nearest_node(dest_pos)
-            
+
             try:
-                path_nodes = nx.shortest_path(self.graph, start_node, dest_node, weight='weight')
-                vehicle = VehicleAgent(f"Car_{self.vehicles_spawned}", self, start_node, dest_node)
+                path_nodes = nx.shortest_path(
+                    self.graph, start_node, dest_node, weight="weight"
+                )
+                vehicle = VehicleAgent(
+                    f"Car_{self.vehicles_spawned}", self, start_node, dest_node
+                )
                 vehicle.path = [(x + 0.5, y + 0.5) for x, y in path_nodes]
-                
+
                 spawn_pos = (start_pos[0] + 0.5, start_pos[1] + 0.5)
                 self.space.place_agent(vehicle, spawn_pos)
                 self.agents_list.append(vehicle)
-                
+
                 self.vehicles_spawned += 1
                 self.parking_schedule[start_id] = self.step_count
-                
+
             except nx.NetworkXNoPath:
                 continue
 
     def step(self):
         self.spawn_vehicles()
-        
+
         # Limpieza de agentes que ya llegaron
-        self.agents_list = [a for a in self.agents_list if getattr(a, "state", "") != "ARRIVED"]
+        self.agents_list = [
+            a for a in self.agents_list if getattr(a, "state", "") != "ARRIVED"
+        ]
 
         self.datacollector.collect(self)
         self.random.shuffle(self.agents_list)
-        
-        # Mesa 3.0: Use agents.shuffle_do("step") instead of schedule.step()
-        self.agents.shuffle_do("step")
-        
-        # for agent in self.agents_list:
-        #     agent.step()
+
         for agent in self.agents_list:
+            if hasattr(agent, "step"):
+                agent.step()
+        for agent in list(self.agents_list):
             if hasattr(agent, "advance"):
-                agent.advance()     
+                agent.advance()
         self.step_count += 1
 
     # =======================================================
@@ -252,143 +246,272 @@ class TrafficModel(Model):
     def build_city_graph(self):
         def add_line(start, end, direction, weight=1):
             curr = list(start)
-            max_iters = 100
-            iters = 0
-            while iters < max_iters:
+            while curr != list(end):
                 node_curr = tuple(curr)
-                
-                # Añadir nodo actual
-                self.graph.add_node(node_curr)
-                # Cast to int for grid access
-                self.city_layout[int(curr[0])][int(curr[1])] = ROAD
-                
-                if curr == list(end):
-                    break
-                    
                 next_x = curr[0] + direction[0]
                 next_y = curr[1] + direction[1]
                 node_next = (next_x, next_y)
-                
-                # Check bounds
-                if not (0 <= next_x < 74 and 0 <= next_y < 74): break
-                
+
+                # límites pensados para 25x25 pero válidos dentro del 74x74
+                if not (0 <= next_x < 74 and 0 <= next_y < 74):
+                    break
+
+                self.graph.add_node(node_curr)
                 self.graph.add_node(node_next)
                 self.graph.add_edge(node_curr, node_next, weight=weight)
-                self.city_layout[int(next_x)][int(next_y)] = ROAD
-                
+                self.city_layout[curr[0]][curr[1]] = ROAD
+                self.city_layout[next_x][next_y] = ROAD
                 curr[0], curr[1] = next_x, next_y
-                iters += 1
 
-        # ===================================================
-        #       DEFINICIÓN DE CALLES (Basado en Coordenadas Usuario)
-        # ===================================================
-        
-        # ===================================================
-        #       DEFINICIÓN DE CALLES (Unidireccionales)
-        # ===================================================
-        
-        # --- CALLES VERTICALES ---
-        # V1: X=1 (Perímetro Izquierdo) -> DOWN
-        add_line((1, 23), (1, 1), (0, -1))
-
-        # V2: X=5, X=6 (Entre Edificios 1/3/7 y 2/4/8) -> DOWN (Dos carriles)
-        add_line((5, 18), (5, 1), (0, -1))
-        add_line((6, 18), (6, 1), (0, -1))
-
-        # V3: X=9 (Entre Edificios 2/4/8 y Glorieta) -> DOWN
-        add_line((9, 23), (9, 1), (0, -1))
-
-        # V4: X=12 (Entre Glorieta y Edificios 5/6/10/11) -> UP
-        add_line((12, 1), (12, 23), (0, 1))
-
-        # V5: X=17, X=18 (Entre Edificios 10/11 y 12) -> UP (Dos carriles)
-        add_line((17, 1), (17, 23), (0, 1))
-        add_line((18, 1), (18, 23), (0, 1))
-
-        # V6: X=23 (Perímetro Derecho) -> UP
-        add_line((23, 1), (23, 23), (0, 1))
-
-
-        # --- CALLES HORIZONTALES ---
-        # H1: Y=2 (Perímetro Superior) -> LEFT
-        add_line((23, 2), (1, 2), (-1, 0))
-
-        # H2: Y=5, Y=6 (Entre Edificios 1/2/5 y 3/4/6) -> LEFT (Dos carriles)
-        add_line((23, 5), (1, 5), (-1, 0))
-        add_line((23, 6), (1, 6), (-1, 0))
-
-        # H3: Y=9 (Arriba de Glorieta) -> LEFT
-        add_line((23, 9), (1, 9), (-1, 0))
-
-        # H4: Y=12 (Abajo de Glorieta) -> RIGHT
-        add_line((1, 12), (23, 12), (1, 0))
-
-        # H5: Y=17, Y=18 (Entre Edificios 7/8/10/12 y 9/11) -> RIGHT (Dos carriles)
-        add_line((1, 17), (23, 17), (1, 0))
-        add_line((1, 18), (23, 18), (1, 0))
-
-        # H6: Y=23 (Perímetro Inferior) -> RIGHT
+        # 1. PERÍMETRO
+        add_line((24, 0), (0, 0), (-1, 0))
+        add_line((23, 1), (1, 1), (-1, 0))
+        add_line((0, 0), (0, 24), (0, 1))
+        add_line((1, 1), (1, 23), (0, 1))
+        add_line((0, 24), (24, 24), (1, 0))
         add_line((1, 23), (23, 23), (1, 0))
+        add_line((24, 24), (24, 0), (0, -1))
+        add_line((23, 23), (23, 1), (0, -1))
 
-        # ---------------------------------------------------
-        # 4. ROTONDA CENTRAL / CRUCE
-        # ---------------------------------------------------
-        # Coordenadas Usuario: 10,10 - 11,11
-        for x in range(10, 12):
-            for y in range(10, 12):
+        # conexiones perímetro
+        self.graph.add_edge((12, 0), (11, 1), weight=3)
+        self.graph.add_edge((12, 1), (11, 0), weight=3)
+        self.graph.add_edge((0, 12), (1, 13), weight=3)
+        self.graph.add_edge((1, 12), (0, 13), weight=3)
+        self.graph.add_edge((12, 24), (13, 23), weight=3)
+        self.graph.add_edge((12, 23), (13, 24), weight=3)
+        self.graph.add_edge((24, 12), (23, 11), weight=3)
+        self.graph.add_edge((23, 12), (24, 11), weight=3)
+
+        self.graph.add_edge((24, 0), (23, 0), weight=1)
+        self.graph.add_edge((23, 0), (23, 1), weight=1)
+        self.graph.add_edge((1, 1), (1, 2), weight=1)
+        self.graph.add_edge((1, 23), (2, 23), weight=1)
+        self.graph.add_edge((23, 23), (23, 22), weight=1)
+
+        # 2. ROTONDA CENTRAL
+        add_line((12, 8), (8, 8), (-1, 0))
+        add_line((8, 8), (8, 12), (0, 1))
+        add_line((8, 12), (12, 12), (1, 0))
+        add_line((12, 12), (12, 8), (0, -1))
+
+        self.graph.add_edge((8, 8), (8, 9), weight=1)
+        self.graph.add_edge((8, 12), (9, 12), weight=1)
+        self.graph.add_edge((12, 12), (12, 11), weight=1)
+        self.graph.add_edge((12, 8), (11, 8), weight=1)
+
+        for x in range(9, 12):
+            for y in range(9, 12):
                 self.city_layout[x][y] = ROUNDABOUT
-        
-        # Conectar rotonda a calles adyacentes (X=9, X=12, Y=9, Y=12)
-        # Esto se hace implícitamente si las calles tocan, pero la rotonda es un obstáculo?
-        # En el modelo anterior, la rotonda era transitable o tenía lógica especial?
-        # Asumimos que las calles rodean la rotonda.
-        # V3 (X=9) toca (9,10) y (9,11).
-        # V4 (X=12) toca (12,10) y (12,11).
-        # H3 (Y=9) toca (10,9) y (11,9).
-        # H4 (Y=12) toca (10,12) y (11,12).
-        
-        # ---------------------------------------------------
+
+        # 3. CARRETERAS VERTICALES (copiadas de tu modelo original)
+        # A
+        add_line((11, 8), (11, 1), (0, -1))
+        add_line((12, 8), (12, 1), (0, -1))
+
+        self.graph.add_edge((12, 7), (11, 6), weight=3)
+        self.graph.add_edge((11, 7), (12, 6), weight=3)
+        self.graph.add_edge((13, 1), (12, 1), weight=1)
+        self.graph.add_edge((12, 1), (11, 1), weight=1)
+        self.graph.add_edge((11, 8), (11, 7), weight=1)
+        self.graph.add_edge((12, 8), (12, 7), weight=1)
+
+        # B
+        add_line((8, 1), (8, 8), (0, 1))
+        add_line((9, 1), (9, 8), (0, 1))
+
+        self.graph.add_edge((8, 7), (9, 6), weight=3)
+        self.graph.add_edge((9, 7), (8, 6), weight=3)
+        self.graph.add_edge((10, 1), (9, 1), weight=1)
+        self.graph.add_edge((9, 1), (8, 1), weight=1)
+        self.graph.add_edge((8, 8), (9, 8), weight=1)
+        self.graph.add_edge((9, 8), (10, 8), weight=1)
+
+        # C
+        add_line((11, 23), (11, 12), (0, -1))
+        add_line((12, 23), (12, 12), (0, -1))
+
+        self.graph.add_edge((11, 20), (12, 19), weight=3)
+        self.graph.add_edge((12, 20), (11, 19), weight=3)
+        self.graph.add_edge((12, 12), (11, 12), weight=1)
+        self.graph.add_edge((11, 12), (10, 12), weight=1)
+        self.graph.add_edge((11, 23), (12, 23), weight=1)
+        self.graph.add_edge((12, 23), (13, 23), weight=1)
+
+        # D
+        add_line((8, 12), (8, 23), (0, 1))
+        add_line((9, 12), (9, 23), (0, 1))
+
+        self.graph.add_edge((8, 14), (9, 15), weight=3)
+        self.graph.add_edge((9, 14), (8, 15), weight=3)
+        self.graph.add_edge((8, 12), (8, 13), weight=1)
+        self.graph.add_edge((9, 12), (9, 13), weight=1)
+        self.graph.add_edge((7, 23), (8, 23), weight=1)
+        self.graph.add_edge((8, 23), (9, 23), weight=1)
+
+        # E
+        add_line((4, 1), (4, 4), (0, 1))
+        add_line((5, 1), (5, 4), (0, 1))
+
+        self.graph.add_edge((4, 2), (5, 3), weight=3)
+        self.graph.add_edge((5, 2), (4, 3), weight=3)
+
+        self.graph.add_edge((6, 1), (5, 1), weight=1)
+        self.graph.add_edge((5, 1), (4, 1), weight=1)
+        self.graph.add_edge((5, 4), (4, 4), weight=1)
+        self.graph.add_edge((4, 4), (3, 4), weight=1)
+        self.graph.add_edge((4, 4), (4, 5), weight=1)
+        self.graph.add_edge((5, 4), (5, 5), weight=1)
+
+        # F
+        add_line((4, 6), (4, 8), (0, 1))
+        add_line((5, 6), (5, 8), (0, 1))
+
+        self.graph.add_edge((4, 6), (5, 7), weight=3)
+        self.graph.add_edge((5, 6), (4, 7), weight=3)
+
+        self.graph.add_edge((6, 5), (5, 5), weight=1)
+        self.graph.add_edge((5, 5), (4, 5), weight=1)
+        self.graph.add_edge((5, 5), (5, 6), weight=1)
+        self.graph.add_edge((4, 5), (4, 6), weight=1)
+        self.graph.add_edge((5, 8), (4, 8), weight=1)
+        self.graph.add_edge((4, 8), (3, 8), weight=1)
+
+        # G
+        add_line((4, 17), (4, 12), (0, -1))
+        add_line((5, 17), (5, 12), (0, -1))
+
+        self.graph.add_edge((4, 15), (5, 14), weight=3)
+        self.graph.add_edge((5, 15), (4, 14), weight=3)
+
+        self.graph.add_edge((6, 12), (5, 12), weight=1)
+        self.graph.add_edge((5, 12), (4, 12), weight=1)
+        self.graph.add_edge((4, 17), (5, 17), weight=1)
+        self.graph.add_edge((5, 17), (6, 17), weight=1)
+
+        # H
+        add_line((17, 12), (17, 23), (0, 1))
+        add_line((18, 12), (18, 23), (0, 1))
+
+        self.graph.add_edge((17, 14), (18, 15), weight=3)
+        self.graph.add_edge((18, 14), (17, 15), weight=3)
+
+        self.graph.add_edge((17, 19), (18, 20), weight=3)
+        self.graph.add_edge((18, 19), (17, 20), weight=3)
+
+        self.graph.add_edge((16, 12), (17, 12), weight=1)
+        self.graph.add_edge((17, 12), (18, 12), weight=1)
+
+        # 4. CARRETERAS HORIZONTALES (también copiadas del original)
+        add_line((1, 11), (8, 11), (1, 0))
+        add_line((1, 12), (8, 12), (1, 0))
+
+        self.graph.add_edge((4, 11), (5, 12), weight=3)
+        self.graph.add_edge((4, 12), (5, 11), weight=3)
+        self.graph.add_edge((1, 10), (1, 11), weight=1)
+        self.graph.add_edge((1, 11), (1, 12), weight=1)
+        self.graph.add_edge((8, 11), (8, 12), weight=1)
+        self.graph.add_edge((8, 12), (8, 13), weight=1)
+
+        add_line((12, 11), (23, 11), (1, 0))
+        add_line((12, 12), (23, 12), (1, 0))
+
+        self.graph.add_edge((16, 11), (17, 12), weight=3)
+        self.graph.add_edge((16, 12), (17, 11), weight=3)
+        self.graph.add_edge((12, 12), (13, 12), weight=1)
+        self.graph.add_edge((12, 11), (13, 11), weight=1)
+        self.graph.add_edge((23, 12), (23, 11), weight=1)
+        self.graph.add_edge((23, 11), (23, 10), weight=1)
+
+        add_line((23, 4), (12, 4), (-1, 0))
+        add_line((23, 5), (12, 5), (-1, 0))
+
+        self.graph.add_edge((18, 5), (17, 4), weight=3)
+        self.graph.add_edge((18, 4), (17, 5), weight=3)
+        self.graph.add_edge((12, 4), (12, 5), weight=1)
+        self.graph.add_edge((12, 5), (12, 6), weight=1)
+        self.graph.add_edge((23, 4), (22, 4), weight=1)
+        self.graph.add_edge((23, 5), (22, 5), weight=1)
+
+        add_line((8, 4), (1, 4), (-1, 0))
+        add_line((8, 5), (1, 5), (-1, 0))
+        self.graph.add_edge((8, 4), (7, 4), weight=2)
+        self.graph.add_edge((8, 5), (7, 5), weight=2)
+        self.graph.add_edge((2, 4), (1, 4), weight=1)
+        self.graph.add_edge((2, 5), (1, 5), weight=1)
+
+        add_line((8, 8), (1, 8), (-1, 0))
+        add_line((8, 9), (1, 9), (-1, 0))
+        self.graph.add_edge((8, 8), (7, 8), weight=2)
+        self.graph.add_edge((8, 9), (7, 9), weight=2)
+        self.graph.add_edge((2, 8), (1, 8), weight=1)
+        self.graph.add_edge((2, 9), (1, 9), weight=1)
+
+        add_line((23, 8), (12, 8), (-1, 0))
+        add_line((23, 9), (12, 9), (-1, 0))
+
+        self.graph.add_edge((21, 9), (20, 8), weight=3)
+        self.graph.add_edge((21, 8), (20, 9), weight=3)
+        self.graph.add_edge((12, 8), (12, 9), weight=1)
+        self.graph.add_edge((12, 9), (12, 10), weight=1)
+        self.graph.add_edge((23, 8), (22, 8), weight=1)
+        self.graph.add_edge((23, 9), (22, 9), weight=1)
+
+        add_line((1, 16), (8, 16), (1, 0))
+        add_line((1, 17), (8, 17), (1, 0))
+
+        self.graph.add_edge((4, 16), (5, 17), weight=3)
+        self.graph.add_edge((4, 17), (5, 16), weight=3)
+        self.graph.add_edge((1, 15), (1, 16), weight=1)
+        self.graph.add_edge((1, 16), (1, 17), weight=1)
+        self.graph.add_edge((8, 16), (8, 17), weight=1)
+        self.graph.add_edge((8, 17), (8, 18), weight=1)
+
+        add_line((17, 16), (12, 16), (-1, 0))
+        add_line((18, 17), (12, 17), (-1, 0))
+
+        self.graph.add_edge((16, 16), (15, 17), weight=3)
+        self.graph.add_edge((16, 17), (15, 16), weight=3)
+        self.graph.add_edge((17, 15), (17, 16), weight=1)
+        self.graph.add_edge((17, 16), (17, 17), weight=1)
+        self.graph.add_edge((12, 17), (12, 16), weight=1)
+        self.graph.add_edge((12, 16), (12, 15), weight=1)
+
         # 5. CONEXIÓN DE ESTACIONAMIENTOS
-        # ---------------------------------------------------
         road_nodes = list(self.graph.nodes)
         for pid, pos in self.parking_spots.items():
             self.graph.add_node(pos)
             self.city_layout[pos[0]][pos[1]] = PARKING
-            # Encontrar nodo de calle más cercano
             if road_nodes:
-                nearest = min(road_nodes, key=lambda n: (n[0]-pos[0])**2 + (n[1]-pos[1])**2)
+                nearest = min(
+                    road_nodes,
+                    key=lambda n: (n[0] - pos[0]) ** 2 + (n[1] - pos[1]) ** 2,
+                )
                 self.graph.add_edge(pos, nearest, weight=1)
                 self.graph.add_edge(nearest, pos, weight=1)
+
     # =======================================================
     #               CONSTRUCCIÓN DE EDIFICIOS
     # =======================================================
-    # =======================================================
-    #               CONSTRUCCIÓN DE EDIFICIOS
     def build_buildings(self):
-        """
-        Coloca celdas tipo BUILDING en las zonas ocupadas por edificios.
-        Basado en las coordenadas del usuario.
-        """
-        # Lista de rectángulos (x_min, y_min, x_max, y_max) INCLUSIVOS
         buildings_rects = [
-            (3, 3, 4, 4),    # Edificio 1
-            (7, 3, 8, 4),    # Edificio 2
-            (3, 7, 4, 8),    # Edificio 3
-            (7, 7, 8, 8),    # Edificio 4
-            (13, 3, 22, 4),  # Edificio 5
-            (13, 7, 22, 8),  # Edificio 6
-            (3, 13, 4, 16),  # Edificio 7
-            (7, 13, 8, 16),  # Edificio 8 (aprox, user said 7,15-16 & 8,13-16)
-            (3, 19, 8, 22),  # Edificio 9 (Bloque grande)
-            (13, 13, 16, 15),# Edificio 10
-            (13, 18, 16, 22),# Edificio 11
-            (19, 13, 22, 22) # Edificio 12
+            (3, 3, 4, 4),
+            (7, 3, 8, 4),
+            (3, 7, 4, 8),
+            (7, 7, 8, 8),
+            (13, 3, 22, 4),
+            (13, 7, 22, 8),
+            (3, 13, 4, 16),
+            (7, 13, 8, 16),
+            (3, 19, 8, 22),
+            (13, 13, 16, 15),
+            (13, 18, 16, 22),
+            (19, 13, 22, 22),
         ]
 
         for (x_min, y_min, x_max, y_max) in buildings_rects:
             for x in range(x_min, x_max + 1):
                 for y in range(y_min, y_max + 1):
-                    # Solo marcar si no es otra cosa (aunque BUILDING suele ser base)
                     if self.city_layout[x][y] == EMPTY:
                         self.city_layout[x][y] = BUILDING
 
@@ -396,43 +519,27 @@ class TrafficModel(Model):
     #               ZONAS ESTÁTICAS (ROJO/VERDE)
     # =======================================================
     def build_static_zones(self):
-        # Green Zones (Indices 0-23)
-        # User: 1,4; 2,4 -> 0,3; 1,3
-        # User: 1,8; 2,8 -> 0,7; 1,7
-        # User: 9,22; 10,22 -> 8,21; 9,21
-        # User: 11,3; 12,3 -> 10,2; 11,2
-        # User: 17,22; 18,22 -> 16,21; 17,21
-        # User: 23,7; 24,7 -> 22,6; 23,6
-        # User: 23,13; 24,13 -> 22,12; 23,12
         green_coords = [
-            (0,3), (1,3),
-            (0,7), (1,7),
-            (8,21), (9,21),
-            (10,2), (11,2),
-            (16,21), (17,21),
-            (22,6), (23,6),
-            (22,12), (23,12)
+            (0, 3), (1, 3),
+            (0, 7), (1, 7),
+            (8, 21), (9, 21),
+            (10, 2), (11, 2),
+            (16, 21), (17, 21),
+            (22, 6), (23, 6),
+            (22, 12), (23, 12),
         ]
         for x, y in green_coords:
             if 0 <= x < 74 and 0 <= y < 74:
                 self.city_layout[x][y] = GREEN_ZONE
 
-        # Red Zones (Indices 0-23)
-        # User: 3,5; 3,6 -> 2,4; 2,5
-        # User: 3,9; 3,10 -> 2,8; 2,9
-        # User: 8,23; 8,24 -> 7,22; 7,23
-        # User: 13,1; 13,2 -> 12,0; 12,1
-        # User: 15,23; 15,24 -> 14,22; 14,23
-        # User: 22,5; 22,6 -> 21,4; 21,5
-        # User: 22,11; 22,12 -> 21,10; 21,11
         red_coords = [
-            (2,4), (2,5),
-            (2,8), (2,9),
-            (7,22), (7,23),
-            (12,0), (12,1),
-            (14,22), (14,23),
-            (21,4), (21,5),
-            (21,10), (21,11)
+            (2, 4), (2, 5),
+            (2, 8), (2, 9),
+            (7, 22), (7, 23),
+            (12, 0), (12, 1),
+            (14, 22), (14, 23),
+            (21, 4), (21, 5),
+            (21, 10), (21, 11),
         ]
         for x, y in red_coords:
             if 0 <= x < 74 and 0 <= y < 74:
@@ -442,16 +549,7 @@ class TrafficModel(Model):
     #               CAMELLONES (LÍNEAS GRUESAS)
     # =======================================================
     def build_median_lines(self):
-        # Vertical lines (x=10.5 -> between col 11 and 12)
-        # Segment 1: Row 1 to 9 (y=0 to y=8) -> y range [0, 9]
         self.median_lines.append(((10.5, 0), (10.5, 9)))
-        
-        # Segment 2: Row 12 to 24 (y=11 to y=23) -> y range [11, 24]
         self.median_lines.append(((10.5, 11), (10.5, 24)))
-        
-        # Horizontal lines (y=9.5 -> between row 10 and 11)
-        # Segment 1: Col 1 to 9 (x=0 to x=8) -> x range [0, 9]
         self.median_lines.append(((0, 9.5), (9, 9.5)))
-        
-        # Segment 2: Col 12 to 24 (x=11 to x=23) -> x range [11, 24]
         self.median_lines.append(((11, 9.5), (24, 9.5)))
