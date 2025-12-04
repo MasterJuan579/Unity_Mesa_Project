@@ -34,7 +34,7 @@ connected = set()
 def reset_model():
     """Crea un nuevo modelo desde cero."""
     global model
-    model = TrafficModel(num_vehicles=200)
+    model = TrafficModel(num_vehicles=100)
     print("🔄 Modelo de tráfico reiniciado")
 
 
