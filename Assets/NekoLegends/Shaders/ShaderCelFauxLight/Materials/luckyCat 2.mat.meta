@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: e1dd6688d83035f4c90d97e9638d6f66
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 265078
+  packageName: Cel Shader Faux Lighting URP
+  packageVersion: 1.1.1
+  assetPath: Assets/NekoLegends/Shaders/ShaderCelFauxLight/Materials/luckyCat 2.mat
+  uploadId: 775903
