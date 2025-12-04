@@ -31591,7 +31591,7 @@ MonoBehaviour:
   agentPrefab: {fileID: 919132149155446097, guid: 42c8f6b44ddf4514d9a3ce6fb4ced093,
     type: 3}
   agentsRoot: {fileID: 1968019155}
-  scaleFactor: 3.0833
+  scaleFactor: 3.084
   swapAxes: 1
   showLayoutDebug: 1
   trafficLightObjects: []
@@ -63246,13 +63246,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1628579595}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.05341785, y: -0.25842294, z: 0.014313263, w: 0.9644476}
+  m_LocalRotation: {x: 0.012840037, y: -0.24243446, z: -0.02386577, w: 0.9697892}
   m_LocalPosition: {x: -81.74, y: 26.23, z: -32.68}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 6.34, y: -30, z: 0}
+  m_LocalEulerAnglesHint: {x: 0.764, y: -28.091, z: -3.011}
 --- !u!1001 &1631879451
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -74718,7 +74718,7 @@ Transform:
   m_GameObject: {fileID: 1968019154}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0.7071089, z: -0, w: -0.7071047}
-  m_LocalPosition: {x: -141, y: 1, z: 37}
+  m_LocalPosition: {x: -138.8, y: 1, z: 39.6}
   m_LocalScale: {x: 0.9894813, y: 0.9506, z: 0.998}
   m_ConstrainProportionsScale: 0
   m_Children: []
