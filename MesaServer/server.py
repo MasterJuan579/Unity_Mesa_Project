@@ -34,7 +34,7 @@ connected = set()
 def reset_model():
     """Crea un nuevo modelo desde cero."""
     global model
-    model = TrafficModel(num_vehicles=50)
+    model = TrafficModel(num_vehicles=100)
     print("🔄 Modelo de tráfico reiniciado")
 
 
@@ -174,7 +174,7 @@ async def simulation_loop():
             model.step()
             await broadcast_state()
         # Controlamos la velocidad de la simulación (aprox 10-20 FPS)
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.5)
 
 
 async def handler(ws):

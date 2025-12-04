@@ -52,5 +52,5 @@
         "temp/": true,
         "Temp/": true
     },
-    "dotnet.defaultSolution": "Unity_Mesa_Project.slnx"
+    "dotnet.defaultSolution": "ciudad_gotica.slnx"
 }

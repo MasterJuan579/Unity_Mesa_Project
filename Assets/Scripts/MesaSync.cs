@@ -3,6 +3,7 @@ using NativeWebSocket;
 using Newtonsoft.Json.Linq;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 
 public class MesaSync : MonoBehaviour
 {
@@ -22,6 +23,9 @@ public class MesaSync : MonoBehaviour
 
     [Header("Debug visual")]
     public bool showLayoutDebug = true;
+
+    [Header("Semáforos")]
+    public List<GameObject> trafficLightObjects = new List<GameObject>();
 
     // Estructura para almacenar el grafo de debug (en coords locales Mesa)
     private List<Vector3[]> debugEdges = new List<Vector3[]>();
@@ -218,7 +222,7 @@ public class MesaSync : MonoBehaviour
     }
 
     // ==========================
-    // AGENTES (coches)
+    // AGENTES (coches y semáforos)
     // ==========================
     private void ApplyMesaState(JArray agents)
     {
@@ -245,28 +249,35 @@ public class MesaSync : MonoBehaviour
             string type = (string)a["type"];
             seen.Add(id);
 
-            if (!unityAgents.ContainsKey(id))
+            // COCHES
+            if (type == "car")
             {
-                if (type == "car")
+                if (!unityAgents.ContainsKey(id))
                 {
                     var go = Instantiate(agentPrefab, agentsRoot);
                     go.name = "Agent_" + id;
                     unityAgents[id] = go;
                 }
-            }
 
-            if (unityAgents.ContainsKey(id))
-            {
-                Vector3 newPos = new Vector3(x, 0f, z);
-                Vector3 oldPos = unityAgents[id].transform.localPosition;
-
-                Vector3 direction = newPos - oldPos;
-                if (direction.sqrMagnitude > 0.001f)
+                if (unityAgents.ContainsKey(id))
                 {
-                    unityAgents[id].transform.localRotation = Quaternion.LookRotation(direction);
-                }
+                    Vector3 newPos = new Vector3(x, 0f, z);
+                    Vector3 oldPos = unityAgents[id].transform.localPosition;
 
-                unityAgents[id].transform.localPosition = newPos;
+                    Vector3 direction = newPos - oldPos;
+                    if (direction.sqrMagnitude > 0.001f)
+                    {
+                        unityAgents[id].transform.localRotation = Quaternion.LookRotation(direction);
+                    }
+
+                    unityAgents[id].transform.localPosition = newPos;
+                }
+            }
+            // SEMÁFOROS
+            else if (type == "traffic_light")
+            {
+                string state = (string)a["state"];
+                UpdateTrafficLight(id, state);
             }
         }
 
@@ -281,6 +292,41 @@ public class MesaSync : MonoBehaviour
         {
             Destroy(unityAgents[id]);
             unityAgents.Remove(id);
+        }
+    }
+
+    // Método para actualizar semáforos
+    private void UpdateTrafficLight(string id, string state)
+    {
+        // Buscar el semáforo por posición o ID
+        // Por ahora imprimimos para debug
+        // Debug.Log($"Semáforo {id} -> {state}");
+        
+        // Buscar todos los semáforos en la escena y actualizar sus luces
+        foreach (var trafficLight in trafficLightObjects)
+        {
+            if (trafficLight == null) continue;
+            
+            // Buscar las luces hijas
+            Transform luzRoja = trafficLight.transform.Find("Luz_Roja");
+            Transform luzAmarilla = trafficLight.transform.Find("Luz_Amarilla");
+            Transform luzVerde = trafficLight.transform.Find("Luz_Verde");
+            
+            if (luzRoja != null)
+            {
+                Light lightR = luzRoja.GetComponent<Light>();
+                if (lightR != null) lightR.enabled = (state == "RED");
+            }
+            if (luzAmarilla != null)
+            {
+                Light lightY = luzAmarilla.GetComponent<Light>();
+                if (lightY != null) lightY.enabled = (state == "YELLOW");
+            }
+            if (luzVerde != null)
+            {
+                Light lightG = luzVerde.GetComponent<Light>();
+                if (lightG != null) lightG.enabled = (state == "GREEN");
+            }
         }
     }
 

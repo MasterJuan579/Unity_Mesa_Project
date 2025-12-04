@@ -1,5 +1,4 @@
 from mesa import Agent
-import numpy as np
 
 PARKING = 3
 
@@ -37,6 +36,7 @@ class TrafficManagerAgent(Agent):
                 if self.next_manager:
                     self.next_manager.activate()
 
+
 class TrafficLightAgent(Agent):
     """
     Agente físico que representa la luz del semáforo en el mapa.
@@ -58,158 +58,95 @@ class TrafficLightAgent(Agent):
     def step(self):
         pass
 
-    def receive_eta(self, vehicle_id, eta):
-        pass
 
 class VehicleAgent(Agent):
     """
-    Agente vehículo con lógica de navegación, evasión de obstáculos 
-    y reglas de prioridad (Derecho de Paso).
+    Agente vehículo simplificado - movimiento discreto (1 celda por step)
     """
     def __init__(self, unique_id, model, start_node, destination_node):
         super().__init__(model)
         self.unique_id = unique_id
         self.start = start_node
         self.destination = destination_node
-        self.velocity = np.array([0.0, 0.0])
-        self.speed = 0.0
-        self.max_speed = 0.5
-        self.acceleration = 0.05
         self.path = []
         self.state = "DRIVING"
+
+    def is_in_roundabout(self):
+        """Verifica si el vehículo está dentro de la rotonda"""
+        return self.pos in self.model.roundabout_ring
+
+    def count_vehicles_in_roundabout(self):
+        """Cuenta vehículos actualmente en la rotonda"""
+        count = 0
+        for agent in self.model.agents_list:
+            if isinstance(agent, VehicleAgent) and agent is not self:
+                if agent.state != "ARRIVED" and agent.pos in self.model.roundabout_ring:
+                    count += 1
+        return count
+
+    def should_yield_at_roundabout(self):
+        """Determina si debe ceder el paso antes de entrar a la rotonda"""
+        if self.pos not in self.model.roundabout_entries:
+            return False
+        
+        # Regla 1: Capacidad máxima
+        if self.count_vehicles_in_roundabout() >= self.model.roundabout_capacity:
+            return True
+        
+        # Regla 2: Ceder a vehículos circulando dentro
+        for agent in self.model.agents_list:
+            if agent is self or not isinstance(agent, VehicleAgent):
+                continue
+            if agent.state == "ARRIVED":
+                continue
+            if agent.is_in_roundabout():
+                # Si el otro está cerca de mi entrada
+                if agent.path:
+                    dist = abs(agent.pos[0] - self.pos[0]) + abs(agent.pos[1] - self.pos[1])
+                    if dist <= 2:
+                        return True
+        return False
+
+    def can_move_to(self, next_pos):
+        """Verifica si puede moverse a la siguiente celda"""
+        # 1. Verificar semáforos
+        cell_contents = self.model.grid.get_cell_list_contents([next_pos])
+        for agent in cell_contents:
+            if isinstance(agent, TrafficLightAgent) and agent.state == "RED":
+                return False
+        
+        # 2. Verificar si hay otro vehículo
+        for agent in cell_contents:
+            if isinstance(agent, VehicleAgent) and agent.state != "ARRIVED":
+                return False
+        
+        return True
 
     def step(self):
         if self.state == "ARRIVED":
             return
-
-        # --- Contexto: ¿Estoy en un estacionamiento? ---
-        cx, cy = int(self.pos[0]), int(self.pos[1])
-        is_in_parking = False
-        if 0 <= cx < len(self.model.city_layout) and 0 <= cy < len(self.model.city_layout[0]):
-            if self.model.city_layout[cx][cy] == PARKING:
-                is_in_parking = True
-
-        # 1. Percepción: Radio amplio (5.0) para anticipar tráfico rápido
-        neighbors = self.model.space.get_neighbors(self.pos, radius=5.0, include_center=False)
         
-        obstacle_ahead = False
-        emergency_brake = False
-        traffic_light = None
-        
-        next_step_pos = self.path[0] if self.path else None
-        current_pos = np.array(self.pos)
-        
-        for agent in neighbors:
-            # --- Detección de Vehículos ---
-            if isinstance(agent, VehicleAgent):
-                if agent.state == "ARRIVED": continue
-
-                # Verificar si el otro vehículo está en estacionamiento
-                ox, oy = int(agent.pos[0]), int(agent.pos[1])
-                other_in_parking = False
-                if 0 <= ox < len(self.model.city_layout) and 0 <= oy < len(self.model.city_layout[0]):
-                    if self.model.city_layout[ox][oy] == PARKING:
-                        other_in_parking = True
-
-                # Regla 1: Prioridad de Avenida
-                # Si yo voy por la calle y el otro está en parking, lo ignoro.
-                if not is_in_parking and other_in_parking:
-                    continue 
-
-                other_pos = np.array(agent.pos)
-                dist = np.linalg.norm(other_pos - current_pos)
-                
-                # Regla 2: Salida segura del estacionamiento
-                if is_in_parking and not other_in_parking:
-                    # Si está lejos (> 4.5), salir.
-                    if dist > 4.5:
-                        continue
-                        
-                    # Si está cerca, verificar si se acerca o se aleja
-                    other_next_step = agent.path[0] if agent.path else None
-                    is_approaching = True 
-                    
-                    if other_next_step is not None:
-                        dist_now = dist
-                        dist_future = np.linalg.norm(np.array(other_next_step) - current_pos)
-                        # Si la distancia futura es mayor o igual, el coche ya pasó.
-                        if dist_future >= dist_now:
-                            is_approaching = False
-                    
-                    # Solo ceder el paso si el coche se está acercando peligrosamente
-                    if is_approaching:
-                        obstacle_ahead = True
-                        emergency_brake = True
-                        continue
-                    else:
-                        continue
-
-                # Regla 3: Seguimiento normal (Misma vía)
-                is_in_front = False
-                if next_step_pos is not None:
-                    my_direction = np.array(next_step_pos) - current_pos
-                    vector_to_other = other_pos - current_pos
-                    if np.dot(my_direction, vector_to_other) > 0:
-                        is_in_front = True
-
-                if is_in_front:
-                    if dist < 0.9:
-                        emergency_brake = True
-                        obstacle_ahead = True
-                    elif dist < 1.9:
-                        obstacle_ahead = True
-            
-            # --- Detección de Semáforos ---
-            elif isinstance(agent, TrafficLightAgent):
-                # Solo obedecer si el semáforo está en mi siguiente paso inmediato
-                if next_step_pos is not None:
-                    dist_to_light = self.model.space.get_distance(agent.pos, next_step_pos)
-                    if dist_to_light < 0.1:
-                        traffic_light = agent
-
-        # --- Cálculo de Velocidad ---
-        target_speed = self.max_speed
-        
-        if traffic_light:
-            if traffic_light.state == "RED":
-                target_speed = 0
-                self.speed = 0 
-            elif traffic_light.state == "YELLOW":
-                target_speed = self.max_speed * 0.5
-        
-        if obstacle_ahead:
-            target_speed = 0
-            self.state = "BRAKING"
-            if emergency_brake:
-                self.speed = 0 
-        
-        # Física de movimiento
-        if target_speed > self.speed:
-            self.speed += self.acceleration
-        elif target_speed < self.speed:
-            self.speed -= self.acceleration
-            
-        if self.speed < 0: 
-            self.speed = 0
-
-    def advance(self):
-        if self.state == "ARRIVED":
+        # ¿Llegamos al destino?
+        if not self.path:
+            self.state = "ARRIVED"
+            self.model.grid.remove_agent(self)
             return
-
-        if self.speed > 0 and self.path:
-            target = self.path[0]
-            current = np.array(self.pos)
-            direction = np.array(target) - current
-            dist = np.linalg.norm(direction)
-            
-            if dist < self.speed:
-                new_pos = target
-                self.path.pop(0)
-                self.model.space.move_agent(self, tuple(new_pos))
-
-                if not self.path:
-                    self.state = "ARRIVED"
-                    self.model.space.remove_agent(self)
-            else:
-                new_pos = current + (direction / dist) * self.speed
-                self.model.space.move_agent(self, tuple(new_pos))
+        
+        next_pos = self.path[0]
+        
+        # Verificar yield en rotonda
+        if self.should_yield_at_roundabout():
+            return
+        
+        # Verificar si podemos avanzar
+        if not self.can_move_to(next_pos):
+            return
+        
+        # Mover
+        self.model.grid.move_agent(self, next_pos)
+        self.path.pop(0)
+        
+        # Verificar si llegamos
+        if not self.path:
+            self.state = "ARRIVED"
+            self.model.grid.remove_agent(self)
