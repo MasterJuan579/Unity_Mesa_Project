@@ -2,6 +2,7 @@ from mesa import Agent
 
 PARKING = 3
 
+
 class TrafficManagerAgent(Agent):
     """
     Agente 'Cerebro' que controla el ciclo de los semáforos.
@@ -14,7 +15,7 @@ class TrafficManagerAgent(Agent):
         self.yellow_time = yellow_time
         self.state = "RED"
         self.time_remaining = 0
-        self.next_manager = None 
+        self.next_manager = None
 
     def set_next(self, manager_agent):
         self.next_manager = manager_agent
@@ -50,9 +51,10 @@ class TrafficLightAgent(Agent):
     @property
     def state(self):
         return self.manager.state
-    
+
     @state.setter
     def state(self, value):
+        # No hacemos nada, el estado lo controla el manager
         pass
 
     def step(self):
@@ -62,14 +64,18 @@ class TrafficLightAgent(Agent):
 class VehicleAgent(Agent):
     """
     Agente vehículo simplificado - movimiento discreto (1 celda por step)
+    Ahora incluye car_type para que Unity pueda escoger el prefab correcto.
     """
-    def __init__(self, unique_id, model, start_node, destination_node):
+    def __init__(self, unique_id, model, start_node, destination_node, car_type="1"):
         super().__init__(model)
         self.unique_id = unique_id
         self.start = start_node
         self.destination = destination_node
         self.path = []
         self.state = "DRIVING"
+        # <<< NUEVO >>>
+        # Tipo de coche: "1", "2", "truck", etc. Lo mandamos a Unity.
+        self.car_type = str(car_type)
 
     def is_in_roundabout(self):
         """Verifica si el vehículo está dentro de la rotonda"""
@@ -88,11 +94,11 @@ class VehicleAgent(Agent):
         """Determina si debe ceder el paso antes de entrar a la rotonda"""
         if self.pos not in self.model.roundabout_entries:
             return False
-        
+
         # Regla 1: Capacidad máxima
         if self.count_vehicles_in_roundabout() >= self.model.roundabout_capacity:
             return True
-        
+
         # Regla 2: Ceder a vehículos circulando dentro
         for agent in self.model.agents_list:
             if agent is self or not isinstance(agent, VehicleAgent):
@@ -114,38 +120,38 @@ class VehicleAgent(Agent):
         for agent in cell_contents:
             if isinstance(agent, TrafficLightAgent) and agent.state == "RED":
                 return False
-        
+
         # 2. Verificar si hay otro vehículo
         for agent in cell_contents:
             if isinstance(agent, VehicleAgent) and agent.state != "ARRIVED":
                 return False
-        
+
         return True
 
     def step(self):
         if self.state == "ARRIVED":
             return
-        
+
         # ¿Llegamos al destino?
         if not self.path:
             self.state = "ARRIVED"
             self.model.grid.remove_agent(self)
             return
-        
+
         next_pos = self.path[0]
-        
+
         # Verificar yield en rotonda
         if self.should_yield_at_roundabout():
             return
-        
+
         # Verificar si podemos avanzar
         if not self.can_move_to(next_pos):
             return
-        
+
         # Mover
         self.model.grid.move_agent(self, next_pos)
         self.path.pop(0)
-        
+
         # Verificar si llegamos
         if not self.path:
             self.state = "ARRIVED"
